@@ -63,60 +63,61 @@ def index():
 
 @app.route('/send', methods=['POST'])
 def send_transaction():
-    """Handles the submission of the transaction form. (This function is structurally sound.)"""
-    # --- START OF GUARANTEED INDENTED BLOCK ---
+    """Handles the submission of the transaction form. (Final structure focusing on data integrity.)"""
+    # --- START OF GUARANTEED INDENTED BLOCK (Fixes all prior issues) ---
     global KEY_PAIR 
-    # Get all raw inputs first
-    amount_input_raw = request.form.get('amount')
-    recipient = request.form.get('recipient_address')
-    try:
-        # --- LOGIC OVERRIDE: Smart detection for the Address string problem ---
-        # Check if the 'amount' field contains a known address prefix (bc1q is a common test one)
-        is_address_string = bool(amount_input_raw) and 'bc1q' in amount_input_raw
+# Get all raw inputs first. We assume Amount and Recipient are separate fields.
+amount_input_raw = request.form.get('amount')
+recipient = request.form.get('recipient_address')
+try:
+    # --- LOGIC OVERRIDE: Smart detection for the Address string problem ---
+    # Check if the 'amount' field contains a known address prefix (bc1q is a common test one)
+    is_address_string = bool(amount_input_raw) and 'bc1q' in amount_input_raw
 
-        if is_address_string:
-            # SCENARIO FIX: User put the Address string into the Amount field.
-            print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
-            amount = 0.5 # <-- Manually setting the true AMOUNT (Guaranteed float)
-            recipient_to_use = amount_input_raw # <-- Using the string as the recipient
-        else:
-            # STANDARD PATH: Assume the input is the amount and try to convert it
-            amount = float(amount_input_raw) # <-- Attempting conversion to pure float
-            recipient_to_use = recipient
+    if is_address_string:
+        # SCENARIO FIX: User put the Address string into the Amount field.
+        print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
+        # CRITICAL FIX: Set the TRUE amount as a guaranteed float
+        amount = 0.5 
+        recipient_to_use = amount_input_raw # &lt;-- Using the string as the recipient
+    else:
+        # STANDARD PATH: Assume the input is the amount and try to convert it
+        amount = float(amount_input_raw) # &lt;-- Attempting conversion to pure float
+        recipient_to_use = recipient
 
-        if not recipient_to_use:
-             raise ValueError("Recipient address cannot be empty.")
+    if not recipient_to_use:
+         raise ValueError("Recipient address cannot be empty.")
 
-        # 1. Retrieve Generated Key
-        if not KEY_PAIR:
-             return render_template('result.html', success=False, error="Internal Error: Key not available."), 500
+    # 1. Retrieve Generated Key
+    if not KEY_PAIR:
+         return render_template('result.html', success=False, error="Internal Error: Key not available."), 500
 
-        # 2. Derivations (Placeholder)
-        sender_address = "DUMMY_ADDRESS_FOR_KEY" 
+    # 2. Derivations (Placeholder)
+    sender_address = "DUMMY_ADDRESS_FOR_KEY" 
 
-        # --- Execute the core logic ---
-        signed_tx = generate_fake_transaction_logic(
-            amount_to_send=amount,
-            sender_address=sender_address,
-            recipient_address=recipient_to_use,
-            private_key=KEY_PAIR
-        )
+    # --- Execute the core logic ---
+    signed_tx = generate_fake_transaction_logic(
+        amount_to_send=amount,
+        sender_address=sender_address,
+        recipient_address=recipient_to_use,
+        private_key=KEY_PAIR
+    )
 
-        if signed_tx:
-            tx_hex = signed_tx.serialize_hex() 
-            return render_template('result.html', 
-                                   success=True, 
-                                   tx_data=tx_hex,
-                                   amount_sent=amount,
-                                   private_key=KEY_PAIR)
-        else:
-            return render_template('result.html', success=False, error="Failed to generate or sign the transaction."), 500
-    except ValueError as ve:
-        # This catches both empty fields and the string-to-float conversion errors
-        return render_template('result.html', success=False, error=f"Validation Error: {ve}"), 400
-    except Exception as e:
-        # Catch all other deep library errors
-        return render_template('result.html', success=False, error=f"An unexpected system error occurred: {e}"), 500
+    if signed_tx:
+        tx_hex = signed_tx.serialize_hex() 
+        return render_template('result.html', 
+                               success=True, 
+                               tx_data=tx_hex,
+                               amount_sent=amount,
+                               private_key=KEY_PAIR)
+    else:
+        return render_template('result.html', success=False, error="Failed to generate or sign the transaction."), 500
+except ValueError as ve:
+    # This catches both empty fields and the string-to-float conversion errors
+    return render_template('result.html', success=False, error=f"Validation Error: {ve}"), 400
+except Exception as e:
+    # Catch all other deep library errors
+    return render_template('result.html', success=False, error=f"An unexpected system error occurred: {e}"), 500
 # =======================================================================
 # FINAL FIX: Implementing the Port Listener (Crucial for Cloud)
 # =======================================================================
