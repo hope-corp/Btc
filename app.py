@@ -1,14 +1,18 @@
 from flask import Flask, render_template, request
-# --- Aggressive Simplification: Using only the necessary core modules ---
+# --- CORRECTED IMPORT: Importing all required sub-components explicitly ---
+# This resolves the "name 'bitcoinlib' is not defined" error internally
 from bitcoinlib.wallets import Wallet
 from bitcoinlib.transactions import Transaction
+# FIX: Import UTXO and Input explicitly to use them directly in the function
+from bitcoinlib.utxo import UTXO 
+from bitcoinlib.input import Input 
 from ecdsa import SigningKey, SECP256k1 
 import os
 import hashlib
 import time
 
 # =======================================================================
-# CRITICAL FIX: Initialize the Flask application object HERE
+# CRITICAL FIX: Initialize the Flask application object HERE (The NameError Fix)
 # =======================================================================
 app = Flask(__name__) 
 
@@ -35,17 +39,17 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
     input (UTXO) and spending it to the recipient.
     """
     try:
-        # Use a manual transaction build approach for the 'fake' input scenario
+        # FIX APPLIED HERE: Using the imported classes directly
         transaction = Transaction()
 
         # 2. Outputs: The funds going to the recipient (The 'Fake' amount)
-        recipient_utxo = bitcoinlib.UTXO(
+        recipient_utxo = UTXO(
             address=recipient_address, 
             value=amount_to_send
         )
 
         # 3. Inputs: The funds being spent (Placeholder Input)
-        input_placeholder = bitcoinlib.Input(
+        input_placeholder = Input(
             tx_id='MOCK_INPUT_TXID', 
             vout=0, 
             script_pubkey='1' # Placeholder script
@@ -114,7 +118,7 @@ def send_transaction():
         return render_template('result.html', success=False, error=f"An unexpected error occurred: {e}"), 500
 
 # =======================================================================
-# FINAL FIX: Implementing the Port Listener
+# FINAL FIX: Implementing the Port Listener (Crucial for Cloud)
 # =======================================================================
 if __name__ == '__main__':
     # --- IMPORTANT: Use the PORT environment variable required by cloud hosts ---
