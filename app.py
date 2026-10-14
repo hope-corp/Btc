@@ -13,16 +13,11 @@ KEY_PAIR = None
 
 def generate_new_key_pair():
     """Generates a new ECDSA key pair suitable for Bitcoin signing."""
-    print("--- Generating new ECDSA Key Pair for Sender ---")
     private_key_bytes = os.urandom(32)
     private_key_hex = private_key_bytes.hex()
-    print(f"--- Key Pair Generated. Hex Private Key: {private_key_hex} ---")
     return private_key_hex
 
 def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_address, private_key):
-    """
-    Generates the transaction structure by relying on the Transaction object's core methods.
-    """
     try:
         transaction = Transaction()
         transaction.add_output(recipient_address, amount_to_send) 
@@ -49,48 +44,51 @@ def send_transaction():
 amount_input_raw = request.form.get('amount')
 recipient = request.form.get('recipient_address')
 try:
-is_address_string = bool(amount_input_raw) and 'bc1q' in amount_input_raw
+    try:
+        is_address_string = bool(amount_input_raw) and 'bc1q' in amount_input_raw
+        if is_address_string:
+            print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
+            amount = 0.5 
+            recipient_to_use = amount_input_raw 
+        else:
+            amount = float(amount_input_raw)
+            recipient_to_use = recipient
 
-if is_address_string:
-    print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
-    amount = 0.5 
-    recipient_to_use = amount_input_raw 
-else:
-    amount = float(amount_input_raw)
-    recipient_to_use = recipient
+        if not recipient_to_use:
+             raise ValueError("Recipient address cannot be empty.")
 
-if not recipient_to_use:
-     raise ValueError("Recipient address cannot be empty.")
+        if not KEY_PAIR:
+             return render_template('result.html', success=False, error="Internal Error: Key not available."), 500
 
-if not KEY_PAIR:
-     return render_template('result.html', success=False, error="Internal Error: Key not available."), 500
+        sender_address = "DUMMY_ADDRESS_FOR_KEY" 
 
-sender_address = "DUMMY_ADDRESS_FOR_KEY" 
+        signed_tx = generate_fake_transaction_logic(
+            amount_to_send=amount,
+            sender_address=sender_address,
+            recipient_address=recipient_to_use,
+            private_key=KEY_PAIR
+        )
 
-signed_tx = generate_fake_transaction_logic(
-amount_to_send=amount,
-sender_address=sender_address,
-recipient_address=recipient_to_use,
-private_key=KEY_PAIR
-)
-
-if signed_tx:
-    tx_hex = signed_tx.serialize_hex() 
-    return render_template('result.html', 
-                           success=True, 
-                           tx_data=tx_hex,
-                           amount_sent=amount,
-                           private_key=KEY_PAIR)
-else:
-    return render_template('result.html', success=False, error="Failed to generate or sign the transaction."), 500
-except ValueError as ve:
-return render_template('result.html', success=False, error=f"Validation Error: {ve}"), 400
+        if signed_tx:
+            tx_hex = signed_tx.serialize_hex() 
+            return render_template('result.html', 
+                                   success=True, 
+                                   tx_data=tx_hex,
+                                   amount_sent=amount,
+                                   private_key=KEY_PAIR)
+        else:
+            return render_template('result.html', success=False, error="Failed to generate or sign the transaction."), 500
+    except ValueError as ve:
+        return render_template('result.html', success=False, error=f"Validation Error: {ve}"), 400
+    except Exception as e:
+        return render_template('result.html', success=False, error=f"An unexpected system error occurred: {e}"), 500
 except Exception as e:
-return render_template('result.html', success=False, error=f"An unexpected system error occurred: {e}"), 500
+    # Catch general errors outside the main logic block
+    return render_template('result.html', success=False, error=f"Top level error: {e}"), 500
 
 if __name__ == '__main__':
-import os
-port = int(os.environ.get("PORT", 5000))
-KEY_PAIR = generate_new_key_pair() 
-print(f"--- Bitcoinlib Web Server Starting on Port {port} ---")
-app.run(debug=True, host='0.0.0.0', port=port)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    KEY_PAIR = generate_new_key_pair() 
+    print(f"--- Bitcoinlib Web Server Starting on Port {port} ---")
+    app.run(debug=True, host='0.0.0.0', port=port)
