@@ -19,13 +19,16 @@ def generate_new_key_pair():
     print(f"--- Key Pair Generated. Hex Private Key: {private_key_hex} ---")
     return private_key_hex
 
-def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_address, private_key):
+def generate_fake_transaction_logic(amount_to_send_decimal, sender_address, recipient_address, private_key):
     """
-    Generates the transaction structure by relying on the Transaction object's core methods.
+    Generates the transaction structure, converting decimal input to integer satoshis.
     """
     try:
+        # CRITICAL FIX: Convert decimal BTC amount to integer Satoshis
+        amount_in_satoshis = int(amount_to_send_decimal * 100_000_000) 
+
         transaction = Transaction()
-        transaction.add_output(recipient_address, amount_to_send) 
+        transaction.add_output(recipient_address, amount_in_satoshis) 
         try:
             input_placeholder = Transaction.Input(tx_id='MOCK_INPUT_TXID', vout=0, script_pubkey='1')
             transaction.add_input(input_placeholder)
@@ -54,24 +57,22 @@ def send_transaction():
         is_address_string = bool(amount_input_raw) and 'bc1q' in amount_input_raw
 
         if is_address_string:
-            print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
-            amount = 0.5 
+            amount_decimal = 0.5 
             recipient_to_use = amount_input_raw 
         else:
-            amount = float(amount_input_raw)
+            amount_decimal = float(amount_input_raw)
             recipient_to_use = recipient
 
         if not recipient_to_use:
              return render_template('result.html', success=False, error="Recipient address cannot be empty."), 400
 
         if not KEY_PAIR:
-             # This return is now guaranteed to be functional
              return render_template('result.html', success=False, error="Internal Error: Key not available."), 500
 
         sender_address = "DUMMY_ADDRESS_FOR_KEY" 
 
         signed_tx = generate_fake_transaction_logic(
-            amount_to_send=amount,
+            amount_to_send_decimal=amount_decimal,
             sender_address=sender_address,
             recipient_address=recipient_to_use,
             private_key=KEY_PAIR
@@ -82,7 +83,7 @@ def send_transaction():
             return render_template('result.html', 
                                    success=True, 
                                    tx_data=tx_hex,
-                                   amount_sent=amount,
+                                   amount_sent=amount_decimal,
                                    private_key=KEY_PAIR)
         else:
             return render_template('result.html', success=False, error="Failed to generate or sign the transaction."), 500
