@@ -64,6 +64,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
         print(f"Error during Bitcoinlib transaction creation or signing: {e}")
         return None
 
+# --- Routes ---
 @app.route('/')
 def index():
     """Displays the input form. Accesses the module-level KEY_PAIR."""
@@ -112,8 +113,18 @@ def send_transaction():
     except Exception as e:
         return render_template('result.html', success=False, error=f"An unexpected error occurred: {e}"), 500
 
+# =======================================================================
+# FINAL FIX: Implementing the Port Listener
+# =======================================================================
 if __name__ == '__main__':
+    # --- IMPORTANT: Use the PORT environment variable required by cloud hosts ---
+    import os
+    # Default to 5000 if PORT environment variable is not set (for local testing)
+    port = int(os.environ.get("PORT", 5000))
+
     # Initialize the key pair when the script starts running directly
     KEY_PAIR = generate_new_key_pair() 
-    print("--- Bitcoinlib Web Server Starting ---")
-    app.run(debug=True)
+    print(f"--- Bitcoinlib Web Server Starting on Port {port} ---")
+
+    # Run the app using the specific port and host '0.0.0.0'
+    app.run(debug=True, host='0.0.0.0', port=port)
