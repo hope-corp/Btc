@@ -5,18 +5,17 @@ from bitcoinlib.wallets import Wallet
 from bitcoinlib.transactions import Transaction
 from bitcoinlib.keys import Keys
 from bitcoinlib.util import decode_hex
-# ---------------------------------------------------
-from ecdsa import SigningKey, SECP256k1, keys # Still useful for low-level keys if needed
+# --- Standard Python libraries ---
+from ecdsa import SigningKey, SECP256k1, keys
 import os
 import hashlib
 import time
 
 # --- CONFIGURATION ---
-# Note: Bitcoinlib might use different node access methods; we keep the placeholder.
 NETWORK_NODE_URL = "http://127.0.0.1:8332"  
 MIN_FEE = 0.0001 
 
-# Global storage for the dynamically generated key pair
+# Global storage for the dynamically generated key pair (Defined at the module level)
 KEY_PAIR = None 
 
 # --- Key Generation Function ---
@@ -34,29 +33,18 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
     Generates the transaction structure using Bitcoinlib, creating a 'fake'
     input (UTXO) and spending it to the recipient.
     """
-
-    # 1. Setup: Initialize Wallet/Transaction structure
-    # Bitcoinlib typically manages this through a Wallet object or manually
-
     try:
-        # A simple way to start: Create a new transaction instance
-        # We use the private_key to simulate the input source
-        wallet = Wallet.create_wallet("mock_wallet", {'keys': {private_key: None}})
-
-        # --- TRANSACTION BUILDING (Bitcoinlib Style) ---
+        # Use a manual transaction build approach for the 'fake' input scenario
+        transaction = Transaction()
 
         # 2. Outputs: The funds going to the recipient (The 'Fake' amount)
-        # Bitcoinlib handles UTXO creation based on addresses and amounts
         recipient_utxo = bitcoinlib.UTXO(
             address=recipient_address, 
             value=amount_to_send
         )
 
-        # 3. Inputs: The funds being spent (The 'Fake' input we are generating)
-        # Since we are 'faking' the input, we simulate an existing input source.
-        # For a true fake input, you'd need real UTXOs, but for simplicity, we define a placeholder input.
-
-        # For this 'fake' scenario, we create a mock input to be spent
+        # 3. Inputs: The funds being spent (Placeholder Input)
+        # We define a mock input to simulate an existing input source that we are spending.
         input_placeholder = bitcoinlib.Input(
             tx_id='MOCK_INPUT_TXID', 
             vout=0, 
@@ -64,13 +52,8 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
         )
 
         # 4. Transaction Builder Setup
-        transaction = Transaction()
         transaction.add_input(input_placeholder)
         transaction.add_output(recipient_utxo)
-
-        # Add change (which is implicitly handled or needs manual calculation/adjustment)
-        # For simplicity in a fake scenario, we are NOT calculating change rigorously here, 
-        # but an advanced version would add change_output = UTXO(...) and adjust fees.
 
         # 5. Signing the Transaction
         # We use the private key to sign the transaction
@@ -84,14 +67,16 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
 
 @app.route('/')
 def index():
-    global KEY_PAIR
+    """Displays the input form. Accesses the module-level KEY_PAIR."""
+    global KEY_PAIR # Explicitly state we are using the module-level variable
     if not KEY_PAIR:
-        KEY_PAIR = generate_new_key_pair()
+        KEY_PAIR = generate_new_key_pair() 
     return render_template('index.html', private_key=KEY_PAIR)
 
 @app.route('/send', methods=['POST'])
 def send_transaction():
-    global KEY_PAIR
+    """Handles the submission of the transaction form."""
+    global KEY_PAIR # Explicitly state we are using the module-level variable
 
     try:
         amount = float(request.form['amount'])
@@ -129,7 +114,7 @@ def send_transaction():
         return render_template('result.html', success=False, error=f"An unexpected error occurred: {e}"), 500
 
 if __name__ == '__main__':
-    global KEY_PAIR
+    # Initialize the key pair when the script starts running directly
     KEY_PAIR = generate_new_key_pair() 
     print("--- Bitcoinlib Web Server Starting ---")
     app.run(debug=True)
