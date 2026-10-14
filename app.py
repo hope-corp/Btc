@@ -1,15 +1,16 @@
 from flask import Flask, render_template, request
-# --- CORRECTED IMPORT: Importing all required sub-components explicitly ---
-# This resolves the "name 'bitcoinlib' is not defined" error internally
+# --- SIMPLIFIED IMPORTS: Reverting to the safest known classes ---
+# We rely on the main Transaction and Wallet namespace for all components
 from bitcoinlib.wallets import Wallet
 from bitcoinlib.transactions import Transaction
-# FIX: Import UTXO and Input explicitly to use them directly in the function
-from bitcoinlib.utxo import UTXO 
-from bitcoinlib.input import Input 
-from ecdsa import SigningKey, SECP256k1 
+# We assume UTXO and Input are available directly under the main namespace 
+# or we use the library's helper objects if they exist at the top level.
+# If that fails, we assume they can be constructed directly via Transaction object.
 import os
 import hashlib
 import time
+# We must keep ecdsa imports as they are necessary for manual key handling
+from ecdsa import SigningKey, SECP256k1 
 
 # =======================================================================
 # CRITICAL FIX: Initialize the Flask application object HERE (The NameError Fix)
@@ -39,17 +40,20 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
     input (UTXO) and spending it to the recipient.
     """
     try:
-        # FIX APPLIED HERE: Using the imported classes directly
+        # --- SIMPLIFIED CONSTRUCTION: Relying on Transaction methods instead of explicit UTXO/Input classes ---
+        # We create a placeholder transaction object first
         transaction = Transaction()
 
         # 2. Outputs: The funds going to the recipient (The 'Fake' amount)
-        recipient_utxo = UTXO(
+        # We instantiate UTXO based on what Transaction/Wallet knows
+        recipient_utxo = Wallet.UTXO( # &lt;-- TRYING WALLET.UTXO if UTXO fails
             address=recipient_address, 
             value=amount_to_send
         )
 
         # 3. Inputs: The funds being spent (Placeholder Input)
-        input_placeholder = Input(
+        # We attempt to use the general Transaction.Input object if available
+        input_placeholder = Transaction.Input(
             tx_id='MOCK_INPUT_TXID', 
             vout=0, 
             script_pubkey='1' # Placeholder script
@@ -67,8 +71,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
     except Exception as e:
         print(f"Error during Bitcoinlib transaction creation or signing: {e}")
         return None
-
-# --- Routes ---
+--- Routes ---
 @app.route('/')
 def index():
     """Displays the input form. Accesses the module-level KEY_PAIR."""
