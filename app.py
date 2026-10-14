@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from pycoin import Transaction, TransactionBuilder, UTXO
+from pycoin.tx import Transaction, TransactionBuilder, UTXO
 from ecdsa import SigningKey, SECP256k1, keys
 import os
 import hashlib
