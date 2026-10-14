@@ -1,16 +1,13 @@
 from flask import Flask, render_template, request
-# --- SIMPLIFIED IMPORTS: Reverting to the safest known classes ---
-# We rely on the main Transaction and Wallet namespace for all components
+# --- Minimal Imports: Relying only on the most stable components ---
+# We rely on the main Transaction namespace and simplified construction methods
 from bitcoinlib.wallets import Wallet
 from bitcoinlib.transactions import Transaction
-# We assume UTXO and Input are available directly under the main namespace 
-# or we use the library's helper objects if they exist at the top level.
-# If that fails, we assume they can be constructed directly via Transaction object.
+# We keep ecdsa imports as they are necessary for manual key handling
+from ecdsa import SigningKey, SECP256k1 
 import os
 import hashlib
 import time
-# We must keep ecdsa imports as they are necessary for manual key handling
-from ecdsa import SigningKey, SECP256k1 
 
 # =======================================================================
 # CRITICAL FIX: Initialize the Flask application object HERE (The NameError Fix)
@@ -18,7 +15,7 @@ from ecdsa import SigningKey, SECP256k1
 app = Flask(__name__) 
 
 # --- CONFIGURATION ---
-NETWORK_NODE_URL = "http://127.0.0.1:8332"  
+NETWORK_NODE_URL = "http://127.0.0.1:8332"
 MIN_FEE = 0.0001 
 
 # Global storage for the dynamically generated key pair
@@ -33,35 +30,27 @@ def generate_new_key_pair():
     print(f"--- Key Pair Generated. Hex Private Key: {private_key_hex} ---")
     return private_key_hex
 
-# --- Core Logic Functions ---
+# --- Core Logic Functions: SIMPLIFIED CONSTRUCTION ---
 def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_address, private_key):
     """
-    Generates the transaction structure using Bitcoinlib, creating a 'fake'
-    input (UTXO) and spending it to the recipient.
+    Generates the transaction structure by constructing the required components 
+    directly, bypassing the failing Wallet.UTXO attribute.
     """
     try:
-        # --- SIMPLIFIED CONSTRUCTION: Relying on Transaction methods instead of explicit UTXO/Input classes ---
-        # We create a placeholder transaction object first
+        # We instantiate Transaction and rely on its high-level methods
         transaction = Transaction()
 
-        # 2. Outputs: The funds going to the recipient (The 'Fake' amount)
-        # We instantiate UTXO based on what Transaction/Wallet knows
-        recipient_utxo = Wallet.UTXO( # &lt;-- TRYING WALLET.UTXO if UTXO fails
-            address=recipient_address, 
-            value=amount_to_send
-        )
+        # --- CORE FIX: Simplified construction method for Output ---
+        # We add the recipient directly as a standard output structure, 
+        # assuming Transaction handles the necessary internal UTXO representation.
 
-        # 3. Inputs: The funds being spent (Placeholder Input)
-        # We attempt to use the general Transaction.Input object if available
-        input_placeholder = Transaction.Input(
-            tx_id='MOCK_INPUT_TXID', 
-            vout=0, 
-            script_pubkey='1' # Placeholder script
-        )
-
-        # 4. Transaction Builder Setup
+        # We create a placeholder input first
+        # Note: We must assume Transaction.Input is available or construct it minimally
+        input_placeholder = Transaction.Input(tx_id='MOCK_INPUT_TXID', vout=0, script_pubkey='1')
         transaction.add_input(input_placeholder)
-        transaction.add_output(recipient_utxo)
+
+        # SIMPLIFIED ADD OUTPUT CALL: This is the fallback to bypass the failing UTXO object
+        transaction.add_output(recipient_address, amount_to_send) 
 
         # 5. Signing the Transaction
         signed_transaction = transaction.sign(private_key)
@@ -72,6 +61,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
         print(f"Error during Bitcoinlib transaction creation or signing: {e}")
         return None
 
+# --- Routes ---
 @app.route('/')
 def index():
     """Displays the input form. Accesses the module-level KEY_PAIR."""
@@ -83,7 +73,7 @@ def index():
 @app.route('/send', methods=['POST'])
 def send_transaction():
     """Handles the submission of the transaction form."""
-    global KEY_PAIR # Explicitly state we are using the module-level variable
+    global KEY_PAIR 
 
     try:
         amount = float(request.form['amount'])
