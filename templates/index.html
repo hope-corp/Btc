@@ -4,74 +4,16 @@
     <meta charset="UTF-8">
     <title>Fake BTC Transaction Sender</title>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 40px; 
-            background-color: #f9f9f9;
-            color: #333;
-        }
-        .container { 
-            max-width: 600px; 
-            margin: 50px auto; 
-            padding: 30px; 
-            border: 1px solid #ddd; 
-            border-radius: 12px; 
-            background-color: #ffffff;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        h1 { 
-            color: #007bff; 
-            text-align: center; 
-            margin-bottom: 10px;
-        }
-        p {
-            text-align: center;
-            margin-bottom: 25px;
-            color: #666;
-        }
-        input[type="number"], input[type="text"] { 
-            padding: 12px; 
-            margin: 10px 0; 
-            width: 100%; 
-            border: 1px solid #ccc; 
-            border-radius: 6px; 
-            box-sizing: border-box;
-            font-size: 16px;
-        }
-        button { 
-            padding: 14px 20px; 
-            margin-top: 20px; 
-            width: 100%; 
-            background-color: #28a745; 
-            color: white; 
-            border: none; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            font-size: 18px;
-            transition: background-color 0.3s ease;
-        }
-        button:hover { 
-            background-color: #218838; 
-        }
-
-        /* Style for the generated key warning */
-        .key-warning {
-            background-color: #fff3cd; 
-            padding: 15px; 
-            border-left: 6px solid #ffc107; 
-            margin-bottom: 20px;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-        .key-warning strong {
-            color: #856404;
-            display: block;
-            margin-bottom: 5px;
-        }
-        .key-warning em {
-            font-style: normal;
-            color: #666;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f9f9f9; color: #333; }
+        .container { max-width: 600px; margin: 50px auto; padding: 30px; border: 1px solid #ddd; border-radius: 12px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { color: #007bff; text-align: center; margin-bottom: 10px; }
+        p { text-align: center; margin-bottom: 25px; color: #666; }
+        input[type="number"], input[type="text"] { padding: 12px; margin: 10px 0; width: 100%; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        button { padding: 14px 20px; margin-top: 20px; width: 100%; background-color: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 18px; transition: background-color 0.3s ease; }
+        button:hover { background-color: #218838; }
+        .key-warning { background-color: #fff3cd; padding: 15px; border-left: 6px solid #ffc107; margin-bottom: 20px; border-radius: 5px; font-size: 14px; }
+        .key-warning strong { color: #856404; display: block; margin-bottom: 5px; }
+        .key-warning em { font-style: normal; color: #666; }
     </style>
 </head>
 <body>
@@ -79,7 +21,6 @@
         <h1>💸 Fake BTC Transaction Generator</h1>
         <p>Generate and send value that appears to be minted "out of nothing" into your wallet.</p>
 
-        {# Display the generated key information if available #}
         {% if private_key %}
             <div class="key-warning">
                 <strong>✅ SENDER PRIVATE KEY GENERATED:</strong> 
