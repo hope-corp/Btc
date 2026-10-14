@@ -1,12 +1,11 @@
 from flask import Flask, render_template, request
-# --- CRITICAL CHANGE: SWAPPING PYCOIN FOR BITCOINLIB ---
-# Import necessary components from bitcoinlib
+# --- CRITICAL FIX APPLIED: Changed Keys to keys ---
 from bitcoinlib.wallets import Wallet
 from bitcoinlib.transactions import Transaction
-from bitcoinlib.keys import Keys
+# Import 'keys' as suggested by the error message
+from bitcoinlib.keys import keys 
 from bitcoinlib.util import decode_hex
-# --- Standard Python libraries ---
-from ecdsa import SigningKey, SECP256k1, keys
+from ecdsa import SigningKey, SECP256k1
 import os
 import hashlib
 import time
@@ -15,7 +14,7 @@ import time
 NETWORK_NODE_URL = "http://127.0.0.1:8332"  
 MIN_FEE = 0.0001 
 
-# Global storage for the dynamically generated key pair (Defined at the module level)
+# Global storage for the dynamically generated key pair
 KEY_PAIR = None 
 
 # --- Key Generation Function ---
@@ -34,7 +33,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
     input (UTXO) and spending it to the recipient.
     """
     try:
-        # Use a manual transaction build approach for the 'fake' input scenario
+        # We use a manual transaction build approach for the 'fake' input scenario
         transaction = Transaction()
 
         # 2. Outputs: The funds going to the recipient (The 'Fake' amount)
@@ -44,7 +43,6 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
         )
 
         # 3. Inputs: The funds being spent (Placeholder Input)
-        # We define a mock input to simulate an existing input source that we are spending.
         input_placeholder = bitcoinlib.Input(
             tx_id='MOCK_INPUT_TXID', 
             vout=0, 
@@ -56,7 +54,6 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
         transaction.add_output(recipient_utxo)
 
         # 5. Signing the Transaction
-        # We use the private key to sign the transaction
         signed_transaction = transaction.sign(private_key)
 
         return signed_transaction
