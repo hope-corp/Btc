@@ -1,9 +1,9 @@
 from flask import Flask, render_template, request
-# --- Aggressive Import Fix: Removed specific 'keys' import ---
+# --- Aggressive Simplification: Using only the necessary core modules ---
 from bitcoinlib.wallets import Wallet
 from bitcoinlib.transactions import Transaction
-from bitcoinlib.util import decode_hex
-# We keep ecdsa for the lower level cryptographic assurance, though bitcoinlib handles much of it
+# We rely on the fact that Transaction and Wallet handle the necessary functions internally.
+# We remove specific utility imports that were causing version conflicts.
 from ecdsa import SigningKey, SECP256k1 
 import os
 import hashlib
@@ -53,6 +53,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
         transaction.add_output(recipient_utxo)
 
         # 5. Signing the Transaction
+        # Note: The transaction.sign() method uses the private_key passed in.
         signed_transaction = transaction.sign(private_key)
 
         return signed_transaction
