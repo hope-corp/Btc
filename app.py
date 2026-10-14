@@ -6,7 +6,7 @@ import hashlib
 import time
 
 # =======================================================================
-# CRITICAL FIX: Initialize the Flask application object HERE 
+# CRITICAL FIX: Initialize the Flask application object HERE (Fixes NameError)
 # =======================================================================
 app = Flask(__name__) 
 
@@ -75,8 +75,8 @@ try:
     if is_address_string:
         # SCENARIO FIX: User put the Address string into the Amount field.
         print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
-        amount = 0.5 # <-- Manually setting the true AMOUNT
-        recipient_to_use = amount_input_raw # <-- Using the string as the recipient
+        amount = 0.5 # &lt;-- Manually setting the true AMOUNT
+        recipient_to_use = amount_input_raw # &lt;-- Using the string as the recipient
     else:
         # STANDARD PATH: Assume the input is the amount and try to convert it
         amount = float(amount_input_raw)
@@ -84,7 +84,6 @@ try:
 
     if not recipient_to_use:
          raise ValueError("Recipient address cannot be empty.")
-
 
     # 1. Retrieve Generated Key
     if not KEY_PAIR:
@@ -116,14 +115,13 @@ except ValueError as ve:
 except Exception as e:
     # Catch all other deep library errors
     return render_template('result.html', success=False, error=f"An unexpected system error occurred: {e}"), 500
-# =======================================================================
-# FINAL FIX: Implementing the Port Listener (Crucial for Cloud)
-# =======================================================================
+=======================================================================
+FINAL FIX: Implementing the Port Listener (Crucial for Cloud)
+=======================================================================
 if __name__ == '__main__':
     import os
     # Default to 5000 if PORT environment variable is not set (for local testing)
     port = int(os.environ.get("PORT", 5000))
-
     # Initialize the key pair when the script starts running directly
     KEY_PAIR = generate_new_key_pair() 
     print(f"--- Bitcoinlib Web Server Starting on Port {port} ---")
