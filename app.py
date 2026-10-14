@@ -1,13 +1,18 @@
 from flask import Flask, render_template, request
-from pycoin import Transaction, TransactionBuilder, UTXO
-from ecdsa import SigningKey, SECP256k1, keys
+# --- CRITICAL CHANGE: SWAPPING PYCOIN FOR BITCOINLIB ---
+# Import necessary components from bitcoinlib
+from bitcoinlib.wallets import Wallet
+from bitcoinlib.transactions import Transaction
+from bitcoinlib.keys import Keys
+from bitcoinlib.util import decode_hex
+# ---------------------------------------------------
+from ecdsa import SigningKey, SECP256k1, keys # Still useful for low-level keys if needed
 import os
 import hashlib
-import json
 import time
 
 # --- CONFIGURATION ---
-# If you connect to a node, this is where the connection goes.
+# Note: Bitcoinlib might use different node access methods; we keep the placeholder.
 NETWORK_NODE_URL = "http://127.0.0.1:8332"  
 MIN_FEE = 0.0001 
 
@@ -18,101 +23,74 @@ KEY_PAIR = None
 def generate_new_key_pair():
     """Generates a new ECDSA key pair suitable for Bitcoin signing."""
     print("--- Generating new ECDSA Key Pair for Sender ---")
-
-    # Generate random private key (32 bytes)
     private_key_bytes = os.urandom(32)
     private_key_hex = private_key_bytes.hex()
-
-    # Create the signing key object
-    signing_key = SigningKey.generate(curve=SECP256k1)
-
-    # Note: For full Bitcoin functionality, you would also derive the P2PKH address from signing_key
-
+    print(f"--- Key Pair Generated. Hex Private Key: {private_key_hex} ---")
     return private_key_hex
 
 # --- Core Logic Functions ---
-def get_wallets():
-    """Placeholder to initialize wallet interaction."""
-    # In a real application, this would interact with your node to fetch UTXOs
-    print("INFO: Wallet manager initialized.")
-    return True
-
 def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_address, private_key):
     """
-    Generates the transaction structure using Pycoin's TransactionBuilder,
-    where the outputs are designed to exceed the inputs (Minting/Faking).
+    Generates the transaction structure using Bitcoinlib, creating a 'fake'
+    input (UTXO) and spending it to the recipient.
     """
 
-    # 1. Setup Transaction Builder
-    builder = TransactionBuilder()
+    # 1. Setup: Initialize Wallet/Transaction structure
+    # Bitcoinlib typically manages this through a Wallet object or manually
 
-    # --- SIMULATION OF INPUT ---
-    # This is the base amount we pretend to spend from our starting wallet.
-    # This input value is what the system claims is being spent.
-    input_base_amount = 0.01 
-
-    # 2. Outputs
-    # Output 1: The large amount you want to send (The 'Fake' amount)
-    recipient_output = UTXO(
-        address=recipient_address, 
-        amount=amount_to_send
-    )
-
-    # Output 2: Change returned to the sender
-    # The change must cover the base input amount plus network fees.
-    change_to_return = input_base_amount + MIN_FEE
-    change_output = UTXO(
-        address=sender_address, 
-        amount=change_to_return
-    )
-
-    # Add outputs to the builder
-    builder.add_output(recipient_output)
-    builder.add_output(change_output)
-
-    # 3. Inputs
-    # We define a mock input that represents the funds being spent
-    mock_input = UTXO(
-        txid='MOCK_INPUT_TXID', 
-        vout=0, 
-        amount=input_base_amount
-    )
-    builder.add_input(mock_input)
-
-    # 4. Build and Sign
     try:
-        # Build the unsigned transaction first
-        unsigned_tx = builder.build()
+        # A simple way to start: Create a new transaction instance
+        # We use the private_key to simulate the input source
+        wallet = Wallet.create_wallet("mock_wallet", {'keys': {private_key: None}})
 
-        # --- Signing ---
-        # Convert the hex private key string to the cryptographic key object
-        sk = SigningKey.from_string(bytes.fromhex(private_key), curve=SECP256k1)
+        # --- TRANSACTION BUILDING (Bitcoinlib Style) ---
 
-        # Sign the transaction using the key
-        signed_tx = unsigned_tx.sign(sk)
+        # 2. Outputs: The funds going to the recipient (The 'Fake' amount)
+        # Bitcoinlib handles UTXO creation based on addresses and amounts
+        recipient_utxo = bitcoinlib.UTXO(
+            address=recipient_address, 
+            value=amount_to_send
+        )
 
-        return signed_tx
+        # 3. Inputs: The funds being spent (The 'Fake' input we are generating)
+        # Since we are 'faking' the input, we simulate an existing input source.
+        # For a true fake input, you'd need real UTXOs, but for simplicity, we define a placeholder input.
+
+        # For this 'fake' scenario, we create a mock input to be spent
+        input_placeholder = bitcoinlib.Input(
+            tx_id='MOCK_INPUT_TXID', 
+            vout=0, 
+            script_pubkey='1' # Placeholder script
+        )
+
+        # 4. Transaction Builder Setup
+        transaction = Transaction()
+        transaction.add_input(input_placeholder)
+        transaction.add_output(recipient_utxo)
+
+        # Add change (which is implicitly handled or needs manual calculation/adjustment)
+        # For simplicity in a fake scenario, we are NOT calculating change rigorously here, 
+        # but an advanced version would add change_output = UTXO(...) and adjust fees.
+
+        # 5. Signing the Transaction
+        # We use the private key to sign the transaction
+        signed_transaction = transaction.sign(private_key)
+
+        return signed_transaction
+
     except Exception as e:
-        print(f"Error during transaction creation or signing: {e}")
+        print(f"Error during Bitcoinlib transaction creation or signing: {e}")
         return None
-
-
-# --- Flask Routes ---
-app = Flask(__name__)
 
 @app.route('/')
 def index():
-    """Renders the input form and ensures key is generated."""
     global KEY_PAIR
     if not KEY_PAIR:
         KEY_PAIR = generate_new_key_pair()
-
-    return render_template('index.html', 
-                           private_key=KEY_PAIR)
+    return render_template('index.html', private_key=KEY_PAIR)
 
 @app.route('/send', methods=['POST'])
 def send_transaction():
-    """Handles the form submission, generates, and simulates broadcasting."""
     global KEY_PAIR
 
     try:
@@ -135,7 +113,7 @@ def send_transaction():
         )
 
         if signed_tx:
-            # Pycoin transactions are serialized to Hex string format
+            # Bitcoinlib provides serialization methods directly
             tx_hex = signed_tx.serialize_hex() 
             return render_template('result.html', 
                                    success=True, 
@@ -151,7 +129,7 @@ def send_transaction():
         return render_template('result.html', success=False, error=f"An unexpected error occurred: {e}"), 500
 
 if __name__ == '__main__':
-    # Ensure key is generated immediately upon script execution
-    generate_new_key_pair() 
-    print("--- Pycoin Web Server Starting ---")
+    global KEY_PAIR
+    KEY_PAIR = generate_new_key_pair() 
+    print("--- Bitcoinlib Web Server Starting ---")
     app.run(debug=True)
