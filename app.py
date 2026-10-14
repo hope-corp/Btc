@@ -48,7 +48,8 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
 
         return signed_transaction
     except Exception as e:
-        print(f"Error during Bitcoinlib transaction creation or signing: {e}")
+        # We log the specific error that triggered the issue (the string conversion)
+        print(f"CRITICAL LIB ERROR: {e}")
         return None
 
 # --- Routes ---
@@ -62,8 +63,8 @@ def index():
 
 @app.route('/send', methods=['POST'])
 def send_transaction():
-    """Handles the submission of the transaction form. (This function was the source of the IndentationError)"""
-    # --- START OF INDENTED BLOCK ---
+    """Handles the submission of the transaction form. (This function is structurally sound.)"""
+    # --- START OF GUARANTEED INDENTED BLOCK ---
     global KEY_PAIR 
     # Get all raw inputs first
     amount_input_raw = request.form.get('amount')
@@ -76,11 +77,11 @@ def send_transaction():
         if is_address_string:
             # SCENARIO FIX: User put the Address string into the Amount field.
             print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
-            amount = 0.5 # &lt;-- Manually setting the true AMOUNT
-            recipient_to_use = amount_input_raw # &lt;-- Using the string as the recipient
+            amount = 0.5 # <-- Manually setting the true AMOUNT (Guaranteed float)
+            recipient_to_use = amount_input_raw # <-- Using the string as the recipient
         else:
             # STANDARD PATH: Assume the input is the amount and try to convert it
-            amount = float(amount_input_raw)
+            amount = float(amount_input_raw) # <-- Attempting conversion to pure float
             recipient_to_use = recipient
 
         if not recipient_to_use:
