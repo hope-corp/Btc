@@ -1,11 +1,10 @@
 from flask import Flask, render_template, request
-# --- CRITICAL FIX APPLIED: Changed Keys to keys ---
+# --- Aggressive Import Fix: Removed specific 'keys' import ---
 from bitcoinlib.wallets import Wallet
 from bitcoinlib.transactions import Transaction
-# Import 'keys' as suggested by the error message
-from bitcoinlib.keys import keys 
 from bitcoinlib.util import decode_hex
-from ecdsa import SigningKey, SECP256k1
+# We keep ecdsa for the lower level cryptographic assurance, though bitcoinlib handles much of it
+from ecdsa import SigningKey, SECP256k1 
 import os
 import hashlib
 import time
@@ -33,7 +32,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
     input (UTXO) and spending it to the recipient.
     """
     try:
-        # We use a manual transaction build approach for the 'fake' input scenario
+        # Use a manual transaction build approach for the 'fake' input scenario
         transaction = Transaction()
 
         # 2. Outputs: The funds going to the recipient (The 'Fake' amount)
@@ -65,7 +64,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
 @app.route('/')
 def index():
     """Displays the input form. Accesses the module-level KEY_PAIR."""
-    global KEY_PAIR # Explicitly state we are using the module-level variable
+    global KEY_PAIR 
     if not KEY_PAIR:
         KEY_PAIR = generate_new_key_pair() 
     return render_template('index.html', private_key=KEY_PAIR)
