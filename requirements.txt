@@ -1,0 +1,3 @@
+Flask
+python-bitcoinlib
+# Add other specific dependencies if needed by bitcoinlib
