@@ -13,11 +13,16 @@ KEY_PAIR = None
 
 def generate_new_key_pair():
     """Generates a new ECDSA key pair suitable for Bitcoin signing."""
+    print("--- Generating new ECDSA Key Pair for Sender ---")
     private_key_bytes = os.urandom(32)
     private_key_hex = private_key_bytes.hex()
+    print(f"--- Key Pair Generated. Hex Private Key: {private_key_hex} ---")
     return private_key_hex
 
 def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_address, private_key):
+    """
+    Generates the transaction structure by relying on the Transaction object's core methods.
+    """
     try:
         transaction = Transaction()
         transaction.add_output(recipient_address, amount_to_send) 
@@ -38,14 +43,16 @@ def index():
     if not KEY_PAIR:
         KEY_PAIR = generate_new_key_pair() 
     return render_template('index.html', private_key=KEY_PAIR)
+
 @app.route('/send', methods=['POST'])
 def send_transaction():
     global KEY_PAIR 
-amount_input_raw = request.form.get('amount')
-recipient = request.form.get('recipient_address')
-try:
+    amount_input_raw = request.form.get('amount')
+    recipient = request.form.get('recipient_address')
+
     try:
         is_address_string = bool(amount_input_raw) and 'bc1q' in amount_input_raw
+
         if is_address_string:
             print("!!! LOGIC OVERRIDE: Amount field detected as Address. Assigning default amount of 0.5 BTC.")
             amount = 0.5 
@@ -55,9 +62,10 @@ try:
             recipient_to_use = recipient
 
         if not recipient_to_use:
-             raise ValueError("Recipient address cannot be empty.")
+             return render_template('result.html', success=False, error="Recipient address cannot be empty."), 400
 
         if not KEY_PAIR:
+             # This return is now guaranteed to be functional
              return render_template('result.html', success=False, error="Internal Error: Key not available."), 500
 
         sender_address = "DUMMY_ADDRESS_FOR_KEY" 
@@ -82,9 +90,6 @@ try:
         return render_template('result.html', success=False, error=f"Validation Error: {ve}"), 400
     except Exception as e:
         return render_template('result.html', success=False, error=f"An unexpected system error occurred: {e}"), 500
-except Exception as e:
-    # Catch general errors outside the main logic block
-    return render_template('result.html', success=False, error=f"Top level error: {e}"), 500
 
 if __name__ == '__main__':
     import os
