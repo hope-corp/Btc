@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request
 # --- Minimal Imports: Relying only on the most stable components ---
 from bitcoinlib.transactions import Transaction
-# We keep ecdsa imports as they are necessary for manual key handling
 from ecdsa import SigningKey, SECP256k1 
 import os
 import hashlib
@@ -15,7 +14,6 @@ app = Flask(__name__)
 # --- CONFIGURATION ---
 NETWORK_NODE_URL = "http://127.0.0.1:8332"
 MIN_FEE = 0.0001 
-
 # Global storage for the dynamically generated key pair
 KEY_PAIR = None 
 
@@ -31,8 +29,8 @@ def generate_new_key_pair():
 # --- Core Logic Functions: HYPER-SIMPLIFICATION ---
 def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_address, private_key):
     """
-    This function relies on the Transaction object's core methods to handle 
-    the construction, bypassing the failing Wallet.UTXO/Transaction.Input attributes.
+    Generates the transaction structure by relying on the Transaction object's core methods 
+    to handle the construction, bypassing the failing Wallet.UTXO/Transaction.Input attributes.
     """
     try:
         transaction = Transaction()
@@ -44,7 +42,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
         # 2. We MUST add at least one input for a valid transaction. 
         # We attempt to use Transaction.Input, as it is the most likely fix for the 'Input' attribute error.
         try:
-            # Try Transaction.Input again, as it might be a static method instead of a class attribute
+            # Try Transaction.Input again, as it is the most likely fix for the 'Input' attribute error
             input_placeholder = Transaction.Input(tx_id='MOCK_INPUT_TXID', vout=0, script_pubkey='1')
             transaction.add_input(input_placeholder)
         except:
@@ -75,8 +73,16 @@ def send_transaction():
     global KEY_PAIR 
 
     try:
-        amount = float(request.form['amount'])
-        recipient = request.form['recipient_address']
+        # CRITICAL FIX: Explicitly cast the amount to float, catching potential strings
+        amount_input = request.form.get('amount')
+
+        if not amount_input:
+             raise ValueError("Amount field is empty.")
+
+        # This line explicitly forces the string input to become a number (float)
+        amount = float(amount_input) 
+
+        recipient = request.form.get('recipient_address')
 
         # 1. Retrieve Generated Key
         if not KEY_PAIR:
@@ -104,10 +110,12 @@ def send_transaction():
         else:
             return render_template('result.html', success=False, error="Failed to generate or sign the transaction."), 500
 
-    except ValueError:
-        return render_template('result.html', success=False, error="Invalid amount entered."), 400
+    except ValueError as ve:
+        # This catches both empty fields and the string-to-float conversion errors
+        return render_template('result.html', success=False, error=f"Validation Error: {ve}"), 400
     except Exception as e:
-        return render_template('result.html', success=False, error=f"An unexpected error occurred: {e}"), 500
+        # Catch all other deep library errors
+        return render_template('result.html', success=False, error=f"An unexpected system error occurred: {e}"), 500
 
 # =======================================================================
 # FINAL FIX: Implementing the Port Listener (Crucial for Cloud)
