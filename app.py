@@ -71,7 +71,7 @@ def generate_fake_transaction_logic(amount_to_send, sender_address, recipient_ad
     except Exception as e:
         print(f"Error during Bitcoinlib transaction creation or signing: {e}")
         return None
---- Routes ---
+
 @app.route('/')
 def index():
     """Displays the input form. Accesses the module-level KEY_PAIR."""
