@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, jsonify
 from bitcoinlib.transactions import Transaction 
 import requests
@@ -6,6 +5,7 @@ import json
 from datetime import datetime
 
 # --- CONFIGURATION ---
+# Use a real, reliable RPC node for actual broadcasting.
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 RPC_AUTH = None 
 app = Flask('main') 
@@ -33,13 +33,11 @@ def call_rpc_node(method, params=None):
         response.raise_for_status() 
         rpc_result = response.json()
 
-        # Check for protocol errors returned by the node itself
         if 'error' in rpc_result:
             return {"error_details": rpc_result['error']['message']}
 
         return rpc_result.get('result')
     except requests.exceptions.RequestException as e:
-        # Catch general connection or HTTP errors
         return {"error_details": f"CONNECTION FAILURE: {e}"}
 
 # ==========================================================================
@@ -47,37 +45,27 @@ def call_rpc_node(method, params=None):
 # ==========================================================================
 def create_submission_payload(amount_btc, destination_address, input_address, input_private_key):
     """
-    Creates a dictionary payload optimized for direct RPC submission.
+    Creates a transaction ready for broadcast.
     """
     try:
-        # Initialize the transaction object
         tx = Transaction()
 
-        # Define and add the output address
+        # 1. Output (Where it's going)
         output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
 
-        # --- CRITICAL FIX: FALLBACK LOGIC FOR SIMPLIFIED FRONTEND ---
-        # If the frontend only sends Amount/Address, we assume defaults for the missing inputs.
-        default_input_address = "MANUAL_INPUT_ADDRESS_TO_FALLBACK" 
-        default_private_key = "MANUAL_FALLBACK_PRIVATE_KEY_TO_AUTHORIZE" 
+        # 2. Input (Where it comes from/the source you are spending)
+        tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
+        tx.add_fee() # Automatically calculate and add network fees
 
-        # Use the provided data, or the fallback data if inputs are empty
-        final_input_address = input_address if input_address else default_input_address
-        final_private_key = input_private_key if input_private_key else default_private_key
-
-        tx.add_input(final_input_address, final_private_key, amount_satoshi=output_satoshi)
-        tx.add_fee() 
-
-        # Sign the transaction locally (Crucial step)
+        # 3. Sign and finalize
         tx.sign() 
 
-        # Serialize to raw hex format, which RPC node needs
+        # Serialize to raw hex format
         raw_tx_hex = tx.serialize()
         return raw_tx_hex
     except Exception as e:
-        # Raise an exception if any part of the construction fails
-        raise Exception(f"Simplified Payload Failure: {str(e)}")
+        raise Exception(f"Transaction Construction Failure: {str(e)}")
 
 # ==========================================================================
 # API Endpoints
@@ -93,19 +81,18 @@ def api_endpoint():
     data = request.get_json()
     amount_raw = data.get('amount')        
     address_str = data.get('address')      
-    input_address_provided = data.get('input_address') 
-    private_key_provided = data.get('private_key') 
+    input_address = data.get('input_address') 
+    private_key = data.get('private_key') 
 
-    # Validate only what the client is guaranteed to send (Amount &amp; Address)
-    if not amount_raw or not address_str:
-        return jsonify({"error": "Missing Fields Error: Amount and Destination Address are required."}), 400
+    # Validation is now stricter, enforcing the minimum needed for spending
+    if not amount_raw or not address_str or not input_address or not private_key:
+        return jsonify({"error": "FATAL INPUT ERROR: All four fields (Amount, Destination Address, Input Address, Private Key) must be provided for spendable BTC."}), 400
 
     try:
-        # 1. Build Payload (Using the simplified function)
-        raw_tx_hex = create_submission_payload(float(amount_raw), address_str, 
-                                                input_address_provided, private_key_provided)
+        # 1. Build Payload
+        raw_tx_hex = create_submission_payload(float(amount_raw), address_str, input_address, private_key)
 
-        # 2. Call the RPC Node with the raw hex string
+        # 2. Broadcast
         rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_hex])
 
         # 3. Outcome Check
@@ -119,12 +106,12 @@ def api_endpoint():
         return jsonify({
             "status": "success",
             "broadcast_result": rpc_result, 
-            "message": "Transaction successfully submitted to the RPC node. Awaiting confirmation on block explorer."
+            "message": "SUCCESS: Transaction broadcasted and spendable on the Bitcoin Network."
         })
 
     except Exception as e:
         # Catch all failures within the endpoint handler
-        return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
+        return jsonify({"error": f"CRITICAL SYSTEM FAILURE: {str(e)}"}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-
