@@ -42,7 +42,7 @@ def call_rpc_node(method, params=None):
     except requests.exceptions.RequestException as e:
         # Connection/HTTP failure
         return {"error_details": f"CONNECTION FAILURE: {e}"}
-=========================================================================
+
 TRANSACTION BUILDING AND SIGNING LOGIC (THE FIX)
 def build_and_mint_tx(amount_btc, destination_address, input_address, input_private_key):
     """
