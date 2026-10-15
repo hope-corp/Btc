@@ -41,7 +41,7 @@ def call_rpc_node(method, params=None):
         # Connection/HTTP failure
         return {"error_details": f"CONNECTION FAILURE: {e}"}
 #=============================================#============================
-TRANSACTION BUILDER (SIMPLIFIED):
+#TRANSACTION BUILDER (SIMPLIFIED):
 def create_submission_payload(amount_btc, destination_address, input_address, input_private_key):
     """
     Creates a dictionary payload optimized for direct RPC submission.
