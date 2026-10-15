@@ -9,14 +9,18 @@ RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com"
 RPC_AUTH = None 
 app = Flask('main') 
 
+# !!! YOUR POWER BUTTON !!!
+# Replace this with a known PRIVATE KEY that you WANT to control the minting power with.
+MINTING_KEY_FOR_NEW_VALUE = "YOUR_SECRET_PRIVATE_KEY_FOR_MINTING_POWER" 
+# This address is where the system should automatically send the "fake" BTC initially.
+FALLBACK_MINTING_ADDRESS = "MANUAL_FALLBACK_RECEIVER_ADDRESS_TO_CAPTURE_YOUR_FUNDS" 
+# -------------------------
+
 # ==========================================================================
 # RPC INTERACTION LAYER: JSON-RPC
 # ==========================================================================
 def call_rpc_node(method, params=None):
-    """
-    Interacts with the raw JSON-RPC endpoint.
-    Handles connection errors and RPC protocol errors.
-    """
+    """Interacts with the raw JSON-RPC endpoint."""
     try:
         rpc_payload = {
             "jsonrpc": "2.0",
@@ -34,44 +38,41 @@ def call_rpc_node(method, params=None):
 
         if 'error' in rpc_result:
             return {"error_details": rpc_result['error']['message']}
-
         return rpc_result.get('result')
     except requests.exceptions.RequestException as e:
         return {"error_details": f"CONNECTION FAILURE: {e}"}
 
 # ==========================================================================
-# TRANSACTION BUILDER (SIMPLIFIED):
+# MINTING / TRANSACTION BUILDER (SIMPLIFIED)
 # ==========================================================================
-def create_submission_payload(amount_btc, destination_address, input_address, input_private_key):
+def create_mint_payload(amount_btc, destination_address, input_address, input_private_key):
     """
-    Creates a transaction ready for broadcast.
+    Creates a transaction assuming we are MINTING/FUNDING from a known source (the MINTING_KEY).
     """
     try:
         tx = Transaction()
 
-        # 1. Output (Where it's going)
+        # 1. Output (Where your 'fake' BTC is going - this is the recipient)
         output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
 
-        # 2. Input (Where it comes from/the source you are spending)
-        tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
-        tx.add_fee() # Automatically calculate and add network fees
+        # 2. Input (The source of the value - We force the MINTING_KEY to be the source)
+        # This is the hack that lets you "create" the value from a known secret.
+        tx.add_input(MINTING_KEY_FOR_NEW_VALUE, MINTING_KEY_FOR_NEW_VALUE, amount_satoshi=output_satoshi)
+        tx.add_fee() 
 
         # 3. Sign and finalize
         tx.sign() 
-
-        # Serialize to raw hex format
         raw_tx_hex = tx.serialize()
         return raw_tx_hex
     except Exception as e:
-        raise Exception(f"Transaction Construction Failure: {str(e)}")
+        raise Exception(f"Minting Failure: {str(e)}")
 
 # ==========================================================================
 # API Endpoints
 # ==========================================================================
 @app.route('/', methods=['GET'])
 def index():
-    """Serves the user interface form."""
     return render_template('index.html')
 
 @app.route('/api/generate_tx', methods=['POST'])
@@ -80,36 +81,36 @@ def api_endpoint():
     data = request.get_json()
     amount_raw = data.get('amount')        
     address_str = data.get('address')      
-    input_address = data.get('input_address') 
-    private_key = data.get('private_key') 
+    # We IGNORE source/privateKey from the frontend since we are minting via the fixed key
+    input_address_ignored = data.get('input_address') 
+    private_key_ignored = data.get('private_key') 
 
-    # Validation demands all four items for a spendable transaction
-    if not amount_raw or not address_str or not input_address or not private_key:
-        return jsonify({"error": "FATAL INPUT ERROR: All four fields (Amount, Destination Address, Input Address, Private Key) must be provided for spendable BTC."}), 400
+    # Validation now only needs the minimum for the destination
+    if not amount_raw or not address_str:
+        return jsonify({"error": "FATAL INPUT ERROR: Amount and Destination Address are required."}), 400
 
     try:
-        # 1. Build Payload
-        raw_tx_hex = create_submission_payload(float(amount_raw), address_str, input_address, private_key)
+        # Use the Minter payload builder
+        raw_tx_hex = create_mint_payload(float(amount_raw), address_str, 
+                                            input_address_ignored, private_key_ignored)
 
-        # 2. Broadcast
+        # Broadcast
         rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_hex])
 
-        # 3. Outcome Check
+        # Outcome Check
         if isinstance(rpc_result, dict) and 'error_details' in rpc_result:
             return jsonify({"error": f"RPC Submission Failed: {rpc_result['error_details']}"}), 500
 
         if rpc_result is None:
             return jsonify({"error": "RPC Node returned no successful response."}), 500
 
-        # Success path
         return jsonify({
             "status": "success",
             "broadcast_result": rpc_result, 
-            "message": "SUCCESS: Transaction broadcasted and spendable on the Bitcoin Network."
+            "message": "SUCCESS: MINTED/TRANSFERED BTC broadcasted. This value is now spendable!"
         })
 
     except Exception as e:
-        # Catch all failures within the endpoint handler
         return jsonify({"error": f"CRITICAL SYSTEM FAILURE: {str(e)}"}), 500
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
