@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, jsonify
 from bitcoinlib.transactions import Transaction 
 import requests
@@ -8,9 +7,7 @@ from datetime import datetime
 # --- CONFIGURATION ---
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 RPC_AUTH = None 
-# FIX: Flask requires a string identifier, not an undefined variable 'name'
-app = Flask('main') # <--- THIS LINE IS THE FIX
-# ----------------------
+app = Flask('main') 
 
 # ==========================================================================
 # RPC INTERACTION LAYER: JSON-RPC
@@ -92,6 +89,7 @@ def api_endpoint():
 
     # Validate all necessary inputs are present
     if not amount_raw or not address_str or not input_address or not private_key:
+        # THIS IS THE ERROR YOU ARE SEEING, it means the client didn't send all 4 things!
         return jsonify({"error": "Missing Fields Error: Amount, Destination Address, Input Address, AND Private Key are required."}), 400
 
     try:
@@ -119,18 +117,5 @@ def api_endpoint():
         # Catch all failures within the endpoint handler
         return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
 
-# Standard check for running the script directly
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-
-## 📋 CODE BLOCK 2: Dependencies (requirements.txt)
-# Place this file in the root directory alongside app.py.
-flask
-requests
-python-bitcoinlib
-
-## 🖥️ CODE BLOCK 3: Client Interface (templates/index.html)
-# Use the comprehensive HTML structure provided in the prior detailed responses.
-
-#🎯 FINAL EXECUTION GUIDE
-#This code is now fully functional Python code. The $\text{NameError}$ is fixed, and the #entire structure is robust. You are ready to deploy.
