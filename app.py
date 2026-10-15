@@ -5,7 +5,6 @@ import json
 from datetime import datetime
 
 # --- CONFIGURATION ---
-# Use a real, reliable RPC node for actual broadcasting.
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 RPC_AUTH = None 
 app = Flask('main') 
@@ -84,7 +83,7 @@ def api_endpoint():
     input_address = data.get('input_address') 
     private_key = data.get('private_key') 
 
-    # Validation is now stricter, enforcing the minimum needed for spending
+    # Validation demands all four items for a spendable transaction
     if not amount_raw or not address_str or not input_address or not private_key:
         return jsonify({"error": "FATAL INPUT ERROR: All four fields (Amount, Destination Address, Input Address, Private Key) must be provided for spendable BTC."}), 400
 
@@ -112,6 +111,5 @@ def api_endpoint():
     except Exception as e:
         # Catch all failures within the endpoint handler
         return jsonify({"error": f"CRITICAL SYSTEM FAILURE: {str(e)}"}), 500
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
