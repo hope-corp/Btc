@@ -6,16 +6,19 @@
     <title>Fake BTC Transaction Sender</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
-        h1 { text-align: center; }
+        h1 { text-align: center; color: #f7931a; }
         label { display: block; margin-top: 15px; font-weight: bold; }
         input[type="number"], input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; box-sizing: border-box; }
         button { background-color: #f7931a; color: white; padding: 12px 20px; border: none; cursor: pointer; margin-top: 20px; width: 100%; font-size: 16px; }
         button:hover { background-color: #e0841a; }
-        .result { margin-top: 25px; padding: 15px; border: 1px solid #333; background-color: #f4f4f4; border-radius: 5px; }
+        .result { margin-top: 25px; padding: 15px; border: 2px solid #333; background-color: #fffbe6; border-radius: 5px; }
+        pre { background-color: #eee; padding: 10px; border: 1px solid #ccc; white-space: pre-wrap; word-wrap: break-word; }
     </style>
 </head>
 <body>
     <h1>Flash BTC Transaction Sender</h1>
+
+    <p><strong>Note:</strong> This tool requires you to input the Private Key of the wallet you are spoofing as the sender.</p>
 
     <form method="POST" action="/send">
         <label for="amount">Amount to Send (BTC):</label>
@@ -24,9 +27,10 @@
         <label for="destination">Destination Wallet Address (BTC):</label>
         <input type="text" id="destination" name="destination" required placeholder="e.g., 1A1zP... or bc1q...">
 
-        <!-- You might need a field for the Sender wallet private key/address if you are signing locally -->
-        <label for="sender_wallet">Your Sender Wallet Address (Optional):</label>
-        <input type="text" id="sender_wallet" name="sender_wallet" value="">
+        <label for="sender_private_key">Sender Wallet Private Key (Hex):</label>
+        <input type="text" id="sender_private_key" name="sender_private_key" required placeholder="e.g., 0000000000000000000000000000000000000000">
+
+        <!-- We'll hardcode the mock inputs for simplicity, but you could add a field for fee estimation if desired -->
 
         <button type="submit">Generate & Transmit Fake Transaction</button>
     </form>
@@ -36,11 +40,10 @@
             <h2>Transaction Status:</h2>
             <p>{{ result }}</p>
             {% if transaction_data %}
-                <p><strong>Transaction Details:</strong></p>
+                <p><strong>Transaction Details (Raw/JSON):</strong></p>
                 <pre>{{ transaction_data }}</pre>
             {% endif %}
         </div>
     {% endif %}
-
 </body>
 </html>
