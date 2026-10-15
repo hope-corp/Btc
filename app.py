@@ -1,3 +1,4 @@
+
 from flask import Flask, render_template, request, jsonify
 from bitcoinlib.transactions import Transaction 
 import requests
@@ -56,11 +57,10 @@ def create_submission_payload(amount_btc, destination_address, input_address, in
         output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
 
-        # !!! CRITICAL ADJUSTMENT: Use defaults for missing fields !!!
-        # Since the client only provides Destination and Amount, we must assume 
-        # these values for the Input/Key to successfully create a transaction.
-        default_input_address = "MANUAL_INPUT_ADDRESS_TO_FALLBACK" # <-- Update this if you know the source
-        default_private_key = "MANUAL_FALLBACK_PRIVATE_KEY_TO_AUTHORIZE" # <-- Update this to a key you own/use for testing
+        # --- CRITICAL FIX: FALLBACK LOGIC FOR SIMPLIFIED FRONTEND ---
+        # If the frontend only sends Amount/Address, we assume defaults for the missing inputs.
+        default_input_address = "MANUAL_INPUT_ADDRESS_TO_FALLBACK" 
+        default_private_key = "MANUAL_FALLBACK_PRIVATE_KEY_TO_AUTHORIZE" 
 
         # Use the provided data, or the fallback data if inputs are empty
         final_input_address = input_address if input_address else default_input_address
@@ -96,7 +96,7 @@ def api_endpoint():
     input_address_provided = data.get('input_address') 
     private_key_provided = data.get('private_key') 
 
-    # Check only what the client is guaranteed to send (Amount & Address)
+    # Validate only what the client is guaranteed to send (Amount &amp; Address)
     if not amount_raw or not address_str:
         return jsonify({"error": "Missing Fields Error: Amount and Destination Address are required."}), 400
 
@@ -128,6 +128,20 @@ def api_endpoint():
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
 
+---
 
-## 📋 CODE BLOCK 2: Dependencies ($\text{requirements.txt}$)
-#**ACTION:** Place this file in the root directory alongside $\text{app.py}$.
+## 💾 CODE BLOCK 2: Dependencies ($\text{requirements.txt}$)
+**ACTION:** Place this file in the root directory alongside $\text{app.py}$.
+flask
+requests
+python-bitcoinlib
+
+---
+## 🖥️ CODE BLOCK 3: Client Interface ($\text{templates/index.html}$)
+**ACTION:** Use the comprehensive HTML structure provided previously, ensuring it maps physical user inputs correctly to the logical names ($\text{amount}$, $\text{address}$, etc.) that the $\text{app.py}$ backend now expects.
+
+---
+# 🎯 FINAL ACTION PLAN (The Solution)
+**IF YOU ARE USING THIS CODE:**
+1.  **If you are using the simple frontend (Address + Amount only):** You **MUST** update the $\text{default\_input\_address}$ and $\text{default\_private\_key}$ inside the $\text{create\_submission\_payload}$ function to valid, real-world data that you know works for the testing network.
+2.  **If you are using the full frontend:** Ensure your client is sending all four required fields ($\text{amount}$, $\text{address}$, $\text{input\_address}$, $\text{private\_key}$).
