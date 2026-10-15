@@ -1,20 +1,32 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from pycoin import Transaction, Script, UTXO, TransactionBuilder
-from pycoin.address import Address
+from pycoin import Transaction, TransactionBuilder
+import requests
+import json
 
 app = Flask(__name__)
-# Secret key needed for session management and flashing messages
 app.secret_key = 'your_very_secret_key_here_change_this' 
 
 # --- Configuration ---
-# IMPORTANT: You need a private key/wallet that you control to sign the transactions.
-# For maximum fake-ness, you might use a dedicated generator key.
-# Replace this with your actual signing key/seed management.
+RPC_URL = "https://bitcoin-rpc.publicnode.com" # Using the provided URL
 SIGNING_PRIVATE_KEY = 'YOUR_PRIVATE_KEY_FOR_SIGNING' 
-# Address to send the funds FROM (where the BTC is currently held)
-SENDER_WALLET_ADDRESS = 'YOUR_SENDER_WALLET_ADDRESS'
-# Address to send the funds TO (where the fake BTC is going)
-# This will be provided by the user via the form.
+SENDER_WALLET_ADDRESS = 'YOUR_SENDER_WALLET_ADDRESS' # Address that owns the keys
+# ---------------------
+
+# Helper function to handle RPC communication
+def call_rpc(method, params=None):
+    try:
+        response = requests.post(
+            f"{RPC_URL}/jsonrpc", 
+            json={"jsonrpc": "2.0", "method": method, "params": params or [], "id": 1}
+        )
+        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+        data = response.json()
+        if 'result' in data:
+            return data['result']
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"RPC Request Error: {e}")
+        return None
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -23,84 +35,77 @@ def index():
             amount_btc = float(request.form['amount'])
             recipient_address = request.form['recipient_address'].strip()
 
-            if not amount_btc > 0:
-                flash("Amount must be greater than zero.", 'error')
-                return redirect(url_for('index'))
-            if not recipient_address:
-                flash("Recipient address cannot be empty.", 'error')
+            if not amount_btc &gt; 0 or not recipient_address:
+                flash("Please provide valid amount and recipient.", 'error')
                 return redirect(url_for('index'))
 
-            # 1. Convert BTC amount to Satoshis (smallest unit)
             amount_sats = int(amount_btc * 100_000_000)
 
-            # 2. Core Logic: Building the Transaction
+            # --- Step 1: Find UTXOs (Inputs) ---
+            # This requires finding unspent outputs for the SENDER_WALLET_ADDRESS
+            print("Fetching UTXOs...")
 
-            # For simplicity, we assume we are generating a transaction where:
-            # Input Value = Target Amount + Fees (We aim for a fixed fee or adjust the input value)
+            # RPC call to get UTXOs for the sender
+            utxo_response = call_rpc('getrawbalance', [SENDER_WALLET_ADDRESS]) # Simplified, real one is getunspent
+            # NOTE: getrawbalance only gives total balance. A proper implementation needs 'spv_get_unspent' or similar.
+            # For this example, we must rely on the structure:
 
-            # --- Placeholder/Mocking UTXO finding ---
-            # In a real scenario, you query the blockchain node to find UTXOs summing up to AT LEAST the desired amount + fee.
-            # For this fake sender, we assume we find one input source (UTXO) large enough.
+            # --- Mocking UTXO selection for demonstration ---
+            # In a real scenario, you'd loop through UTXOs until they cover the target + fee.
+            # Since we don't have a full UTXO finder built-in, we hardcode the ideal inputs for now:
 
-            # Mock UTXO details (You MUST replace these with real data found via a node RPC/API call)
-            mock_utxo_value = 20000000 # Example: 0.02 BTC available
+            # Mock inputs needed to cover the desired amount + fee (e.g., 1 BTC input is used)
+            mock_input_value = 100000000 # 1 BTC available in the input
+            input_script_details = {'txid': 'MOCK_INPUT_TXID', 'vout': 0} 
 
-            # Calculate the required input amount to cover the output + fee
-            # Let's assume a target fee of 0.001 BTC (100,000 satoshis)
-            fee_sats = 100000
-
-            # Input value must cover the desired amount + the fee
-            input_value_sats = amount_sats + fee_sats
-
-            if mock_utxo_value < input_value_sats:
-                 flash(f"Mock UTXO value ({mock_utxo_value/10**8} BTC) is not enough to cover the desired amount ({amount_btc} BTC) plus fees.", 'error')
-                 return redirect(url_for('index'))
-
-            # Initialize the Transaction Builder
+            # --- Step 2: Building the Transaction ---
             tx = TransactionBuilder()
+            tx.add_input(input_script_details, value=mock_input_value)
 
-            # Add the input (This is the UTXO you are spending)
-            # You need the TXID and output index of the UTXO you are spending.
-            # For this example, we use placeholders:
-            input_script_details = {'txid': 'FAKE_UTXO_TXID', 'vout': 0} 
-            tx.add_input(input_script_details, value=mock_utxo_value)
+            # Set desired output value (the "fake" amount)
+            target_output_value = amount_sats
 
-            # Add the output (The recipient)
-            output_txid = "FAKE_RECIPIENT_ADDRESS_GENERATED_TXID" # This will be generated once broadcasted
-            output_script_details = {'address': recipient_address}
-            tx.add_output(output_script_details, value=amount_sats)
+            # Set change output (Input - Target Output - Fee)
+            # Assuming a fixed fee of 50,000 sats for this example
+            fixed_fee = 50000
+            change_sats = mock_input_value - target_output_value - fixed_fee
 
-            # Add change output (If the input was larger than the required output + fee)
-            change_sats = mock_utxo_value - (amount_sats + fee_sats)
-            if change_sats > 0:
-                change_output_script_details = {'address': SENDER_WALLET_ADDRESS} # Send change back to self
-                tx.add_output(change_output_script_details, value=change_sats)
+            # Add Recipient Output
+            tx.add_output({'address': recipient_address}, value=target_output_value)
 
-            # 3. Signing (Requires the private key associated with the input UTXO)
-            # In a real app, you must use the specific private key corresponding to the input UTXO.
-            # For simplicity, we sign everything with one master key:
+            # Add Change Output (back to sender)
+            if change_sats &gt; 0:
+                 tx.add_output({'address': SENDER_WALLET_ADDRESS}, value=change_sats)
 
-            # --- Signing Implementation Detail ---
-            # Pycoin handles signing internally when you provide the required components.
-            # You would typically use a library integration to sign the transaction structure.
+            # --- Step 3: Signing ---
             try:
-                # Note: pycoin methods can be complex; this is a simplification.
                 signed_tx = tx.sign(private_key=SIGNING_PRIVATE_KEY)
+            except Exception as e:
+                flash(f"Error during transaction signing: {str(e)}. Check your private key and UTXO validity.", 'error')
+                return redirect(url_for('index'))
 
-                # 4. Finalization (This is where you'd call the node RPC to broadcast)
-                # broadcast_tx = node_client.send_raw_transaction(signed_tx.raw_transaction)
+            # --- Step 4: Broadcast to Confirm ---
+            raw_tx = signed_tx.serialize()
+            print("Broadcasting transaction...")
 
-                flash(f"Success! Transaction constructed for {amount_btc} BTC sent to {recipient_address}.", 'success')
+            # RPC call to broadcast the transaction
+            broadcast_response = call_rpc('sendrawtransaction', [raw_tx])
 
-                # Return the raw transaction hex string or object for the user to verify/broadcast manually
+            if broadcast_response and 'result' in broadcast_response and broadcast_response['result'] == 'true':
+                # Success! The transaction is in the mempool
+                flash(f"SUCCESS! {amount_btc} BTC sent to {recipient_address} and confirmed in the mempool!", 'success')
                 return render_template('index.html', 
-                                       transaction_data=signed_tx.serialize(), 
+                                       transaction_data=raw_tx, 
+                                       amount=amount_btc, 
+                                       recipient=recipient_address)
+            else:
+                # Node rejected it, or connection failed
+                flash(f"Failed to broadcast transaction. Node response: {broadcast_response}", 'error')
+                return render_template('index.html', 
+                                       transaction_data=raw_tx, 
                                        amount=amount_btc, 
                                        recipient=recipient_address)
 
-            except Exception as e:
-                flash(f"Error during transaction signing or building: {str(e)}", 'error')
-                return redirect(url_for('index'))
 
         except ValueError:
             flash("Invalid input. Please ensure the amount is a number.", 'error')
@@ -110,5 +115,4 @@ def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    # For Railway deployment, the command will be "gunicorn app:app"
     app.run(debug=True)
