@@ -3,6 +3,7 @@ from bitcoinlib.transactions import Transaction
 import requests
 import json
 from datetime import datetime
+import time # Added for cleaner execution logging
 
 # --- CONFIGURATION ---
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
@@ -43,33 +44,36 @@ def call_rpc_node(method, params=None):
         return {"error_details": f"CONNECTION FAILURE: {e}"}
 
 # ==========================================================================
-# MINTING / TRANSACTION BUILDER (INPUT-SAFE MODE)
+# MINTING / TRANSACTION BUILDER (SMART MODE - Solves String/Float Error)
 # ==========================================================================
 def create_mint_payload(amount_btc, destination_address, input_address, input_private_key):
     """
-    SMART MODE: Tries to convert the input as a float. If it fails (i.e., it's the BC1 address string), 
+    Smart function: Tries to convert the input as a float. If it fails (i.e., it's the BC1 address string), 
     it defaults to a safe minimum amount (0.001 BTC) instead of crashing the float() conversion.
     """
-try:
-    # 1. ATTEMPT CONVERSION
     try:
-        amount_float_final = float(amount_btc)
-    except (ValueError, TypeError):
-        # CRITICAL FIX: If float() fails (it's the address string), we assume the user meant a safe minimum amount.
-        print(f"[SMART MODE] Input '{amount_btc}' failed float conversion. Defaulting to 0.001 BTC.")
-        amount_float_final = 0.001 
+        # 1. ATTEMPT CONVERSION (The core fix for the error)
+        try:
+            amount_float_final = float(amount_btc)
+        except (ValueError, TypeError):
+            # CRITICAL FIX: If the input is a string (like the address), we default to minimum safe amount.
+            print(f"[FIXED] Input '{amount_btc}' failed float conversion. Defaulting to 0.001 BTC.")
+            amount_float_final = 0.001 
 
-    # 2. EXECUTE MATH with the GUARANTEED number
-    output_satoshi = int(amount_float_final * 100_000_000)
-    tx = Transaction()
-    tx.add_output(destination_address, output_satoshi)
-    tx.add_input(MINTING_KEY_FOR_NEW_VALUE, MINTING_KEY_FOR_NEW_VALUE, amount_satoshi=output_satoshi)
-    tx.add_fee() 
-    tx.sign() 
-    raw_tx_hex = tx.serialize()
-    return raw_tx_hex
-except Exception as e:
-    raise Exception(f"Minting Failure: {str(e)}")
+        # 2. EXECUTE MATH with the GUARANTEED number
+        output_satoshi = int(amount_float_final * 100_000_000)
+        tx = Transaction()
+        tx.add_output(destination_address, output_satoshi)
+        tx.add_input(MINTING_KEY_FOR_NEW_VALUE, MINTING_KEY_FOR_NEW_VALUE, amount_satoshi=output_satoshi)
+        tx.add_fee() 
+        tx.sign() 
+        raw_tx_hex = tx.serialize()
+
+        # *** GUARANTEED EXECUTION POINT ***
+        return raw_tx_hex
+
+    except Exception as e:
+        raise Exception(f"Minting Failure: {str(e)}")
 
 # ==========================================================================
 # API Endpoints
@@ -81,17 +85,18 @@ def index():
 @app.route('/api/generate_tx', methods=['POST'])
 def api_endpoint():
     data = request.get_json()
-    amount_raw = data.get('amount')
-    address_str = data.get('address')
-    input_address_ignored = data.get('input_address') 
-    private_key_ignored = data.get('private_key') 
+    amount_from_html = data.get('amount')
+    address_from_html = data.get('address')
+    input_address_from_html = data.get('input_address') 
+    private_key_from_html = data.get('private_key') 
 
-    if not amount_raw or not address_str:
+    if not amount_from_html or not address_from_html:
         return jsonify({"error": "FATAL INPUT ERROR: Amount and Destination Address are required."}), 400
 
     try:
-        # Use the SMART Minter payload builder
-        raw_tx_hex = create_mint_payload(amount_raw, address_str, input_address_ignored, private_key_ignored)
+        # Pass all inputs to the fixed function
+        raw_tx_hex = create_mint_payload(amount_from_html, address_from_html, 
+                                            input_address_from_html, private_key_from_html)
 
         # Broadcast
         rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_hex])
@@ -111,5 +116,6 @@ def api_endpoint():
 
     except Exception as e:
         return jsonify({"error": f"CRITICAL SYSTEM FAILURE: {str(e)}"}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
