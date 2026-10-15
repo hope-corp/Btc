@@ -106,4 +106,4 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
 
 ## 📋 CODE BLOCK 2: Dependencies (requirements.txt)
-**(Action: Place this file in the root directory alongside app.py.)**
+#**(Action: Place this file in the root directory alongside app.py.)**
