@@ -21,7 +21,7 @@
 <body>
     <div class="container">
         <h1>₿ BTC Pure Mint Generator</h1>
-        <p class="warning">⚠️ IMPORTANT: Unsigned transactions rely on Trust-Based Acceptance by the network/wallet. If you have a private key, ensure it's set in the backend for cryptographic proof!</p>
+        <p class="warning">⚠️ IMPORTANT: Since we are mocking the RPC connection, this tests local math only. Use the live call_tatum_api function if you want live network testing!</p>
 
         <label for="amount">BTC Amount to Mint (Value to be sent):</label>
         <input type="number" id="amount" value="0.001" step="0.00001" required>
@@ -41,74 +41,73 @@
         </div>
     </div>
 
-    <script>
-        // --- UI State Management Globals ---
-        const btn = document.getElementById('generateBtn');
-        const btnText = document.getElementById('btnText');
-        const statusEl = document.getElementById('status_message');
-        const outputEl = document.getElementById('transaction_output');
+<script>
+    // --- UI State Management Globals ---
+    const btn = document.getElementById('generateBtn');
+    const btnText = document.getElementById('btnText');
+    const statusEl = document.getElementById('status_message');
+    const outputEl = document.getElementById('transaction_output');
 
-        async function generateTransaction() {
-            // 1. UI State Update (Locking the button)
-            btn.disabled = true;
-            btnText.textContent = '⚙️ PROCESSING...';
-            statusEl.textContent = '⌛ Initializing transaction build...';
-            outputEl.value = '';
+    async function generateTransaction() {
+        // 1. UI State Update (Locking the button)
+        btn.disabled = true;
+        btnText.textContent = '⚙️ PROCESSING...';
+        statusEl.textContent = '⌛ Initializing transaction build...';
+        outputEl.value = '';
 
-            const amount = document.getElementById('amount').value;
-            const address = document.getElementById('address').value;
+        const amount = document.getElementById('amount').value;
+        const address = document.getElementById('address').value;
 
-            // 2. Data Validation
-            if (!amount || !address) {
-                statusEl.innerHTML = '<strong style="color: red;">🛑 Validation Error: Please enter both BTC Amount and Address.</strong>';
-                return;
-            }
+        // 2. Data Validation
+        if (!amount || !address) {
+            statusEl.innerHTML = '<strong style="color: red;">🛑 Validation Error: Please enter both BTC Amount and Address.</strong>';
+            return;
+        }
 
-            console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
-            statusEl.textContent = '⏳ Sending request to Python Backend...';
+        console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
+        statusEl.textContent = '⏳ Sending request to Python Backend...';
 
-            // 3. Fetch API Call
-            try {
-                const response = await fetch('/api/generate_tx', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ amount: amount, address: address })
-                });
+        // 3. Fetch API Call
+        try {
+            const response = await fetch('/api/generate_tx', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ amount: amount, address: address })
+            });
 
-                const data = await response.json();
+            const data = await response.json();
 
-                // 4. Handling Server Response
-                if (response.ok) {
-                    statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
+            // 4. Handling Server Response
+            if (response.ok) {
+                statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
 
-                    if (data.transaction_object) {
-                         outputEl.value = JSON.stringify(data.transaction_object, null, 2);
-                    } else {
-                         outputEl.value = "Transaction structure is empty.";
-                    }
-                    if(data.broadcast_result) {
-                        outputEl.value += "\n\n[--- BROADCAST INFO ---]\nBroadcasted TxID: " + data.broadcast_result;
-                    }
-
+                if (data.transaction_object) {
+                    outputEl.value = JSON.stringify(data.transaction_object, null, 2);
                 } else {
-                    // Error Case: Backend returned a 4xx or 5xx error
-                    const errorMessage = data.error || 'Unknown Server Error';
-                    statusEl.innerHTML = `<strong style="color: red;">❌ ERROR (${response.status}): ${errorMessage}</strong>`;
-                    outputEl.value = "";
+                    outputEl.value = "Transaction structure is empty.";
+                }
+                if(data.broadcast_result) {
+                    outputEl.value += "\n\n[--- BROADCAST INFO ---]\nBroadcasted TxID: " + data.broadcast_result;
                 }
 
-            } catch (error) {
-                // Network/Fetch Error Case: The browser couldn't reach the server at all
-                console.error("[FATAL FETCH ERROR]:", error);
-                statusEl.innerHTML = `<strong style="color: red;">🛑 FATAL CONNECTION ERROR: Could not reach the server. Check your URL and network connection! (${error.message})</strong>`;
+            } else {
+                // Error Case: Backend returned a 4xx or 5xx error
+                const errorMessage = data.error || 'Unknown Server Error';
+                statusEl.innerHTML = `<strong style="color: red;">❌ ERROR (${response.status}): ${errorMessage}</strong>`;
                 outputEl.value = "";
-            } finally {
-                // 5. Cleanup (Always run this)
-                btn.disabled = false;
-                btnText.textContent = '🚀 Generate, Sign (or Trust), and Broadcast';
             }
+
+        } catch (error) {
+            // Network/Fetch Error Case: The browser couldn't reach the server at all
+            console.error("[FATAL FETCH ERROR]:", error);
+            statusEl.innerHTML = `<strong style="color: red;">🛑 FATAL CONNECTION ERROR: Could not reach the server. Check your URL and network connection! (${error.message})</strong>`;
+            outputEl.value = "";
+        } finally {
+            // 5. Cleanup (Always run this)
+            btn.disabled = false;
+            btnText.textContent = '🚀 Generate, Sign (or Trust), and Broadcast';
         }
     </script>
 </body>
