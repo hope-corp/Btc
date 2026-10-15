@@ -3,56 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flash BTC Transaction Sender</title>
+    <title>Fake BTC Transaction Sender</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
-        h1 { text-align: center; color: #333; }
-        form div { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="number"], input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background-color: #f7931a; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; }
-        button:hover { background-color: #e68400; }
-        .flash-message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
-        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .transaction-output { margin-top: 25px; padding: 15px; border: 2px solid #333; background-color: #f9f9f9; }
-        .transaction-output h3 { margin-top: 0; }
-        textarea { width: 100%; height: 150px; padding: 10px; border: 1px solid #ccc; box-sizing: border-box; font-family: monospace; }
+        h1 { text-align: center; }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input[type="number"], input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; box-sizing: border-box; }
+        button { background-color: #f7931a; color: white; padding: 12px 20px; border: none; cursor: pointer; margin-top: 20px; width: 100%; font-size: 16px; }
+        button:hover { background-color: #e0841a; }
+        .result { margin-top: 25px; padding: 15px; border: 1px solid #333; background-color: #f4f4f4; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <h1>⚡ Bitcoin Fake Transaction Sender</h1>
+    <h1>Flash BTC Transaction Sender</h1>
 
-    {# Display Flash Messages #}
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash-message {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
+    <form method="POST" action="/send">
+        <label for="amount">Amount to Send (BTC):</label>
+        <input type="number" step="any" id="amount" name="amount" required>
 
-    <form method="POST">
-        <div>
-            <label for="amount">Amount of BTC to Send:</label>
-            <input type="number" id="amount" name="amount" step="0.000001" required>
-        </div>
-        <div>
-            <label for="recipient_address">Recipient BTC Address (SegWit/Legacy):</label>
-            <input type="text" id="recipient_address" name="recipient_address" placeholder="e.g., 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" required>
-        </div>
-        <button type="submit">Send Fake Transaction</button>
+        <label for="destination">Destination Wallet Address (BTC):</label>
+        <input type="text" id="destination" name="destination" required placeholder="e.g., 1A1zP... or bc1q...">
+
+        <!-- You might need a field for the Sender wallet private key/address if you are signing locally -->
+        <label for="sender_wallet">Your Sender Wallet Address (Optional):</label>
+        <input type="text" id="sender_wallet" name="sender_wallet" value="">
+
+        <button type="submit">Generate & Transmit Fake Transaction</button>
     </form>
 
-    {# Display Transaction Results #}
-    {% if transaction_data %}
-        <div class="transaction-output">
-            <h3>✅ Transaction Built Successfully!</h3>
-            <p><strong>Amount Sent:</strong> {{ amount }} BTC</p>
-            <p><strong>To:</strong> {{ recipient }}</p>
-            <p><strong>Raw Transaction Data (Hex):</strong></p>
-            <textarea readonly>{{ transaction_data }}</textarea>
-            <p><em>(This hex string is what you would submit to a Bitcoin node API for confirmation.)</em></p>
+    {% if result %}
+        <div class="result">
+            <h2>Transaction Status:</h2>
+            <p>{{ result }}</p>
+            {% if transaction_data %}
+                <p><strong>Transaction Details:</strong></p>
+                <pre>{{ transaction_data }}</pre>
+            {% endif %}
         </div>
     {% endif %}
 
