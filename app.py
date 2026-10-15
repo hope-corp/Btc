@@ -8,13 +8,12 @@ from datetime import datetime
 # --- CONFIGURATION ---
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 RPC_AUTH = None 
-# ----------------------
-
+----------------------
 app = Flask(name)
 
-# =========================================================================
+# ==========================================================================
 # 🧩 RPC INTERACTION LAYER: JSON-RPC
-# =========================================================================
+=========================================================================
 def call_rpc_node(method, params=None):
 """
 Interacts with the raw JSON-RPC endpoint.
@@ -37,7 +36,7 @@ try:
     rpc_result = response.json()
 
     if 'error' in rpc_result:
-        # RPC protocol error detected
+        # RPC protocol error detected (e.g., invalid method, bad format)
         return {"error_details": rpc_result['error']['message']}
 
     return rpc_result.get('result')
@@ -46,8 +45,7 @@ except requests.exceptions.RequestException as e:
     # Connection/HTTP failure
     return {"error_details": f"CONNECTION FAILURE: {e}"}
 =========================================================================
-✍️ TRANSACTION BUILDING &amp;amp; SIGNING LOGIC (THE FIX)
-=========================================================================
+✍️ TRANSACTION BUILDING AND SIGNING LOGIC (THE FIX)
 def build_and_mint_tx(amount_btc, destination_address, input_address, input_private_key):
 """
 Constructs the TX object, adds outputs, and signs it locally.
@@ -64,7 +62,6 @@ try:
     tx.add_output(destination_address, output_satoshi)
 
     # 4. Define Inputs (Where the funds come from - THE FIX)
-    # We use bitcoinlib to pull data from the input_address using the private key.
     tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
 
     # 5. Calculate and Add Fees
@@ -105,7 +102,7 @@ if not amount_raw or not address_str or not input_address or not private_key:
 
 try:
     # 1. Build and Sign Locally (The Core Logic)
-    tx_data = build_and_sign_tx(float(amount_raw), address_str, input_address, private_key)
+    tx_data = build_and_mint_tx(float(amount_raw), address_str, input_address, private_key)
 
     # 2. Call the RPC Node with the raw hex string
     rpc_result = call_rpc_node('sendrawtransaction', params=[tx_data['raw_hex']])
@@ -128,5 +125,14 @@ try:
 except Exception as e:
     # Catch all failures
     return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+if name == 'main':
+app.run(host='0.0.0.0', port=8080)
+
+---
+## 📝 Code Block 2: The Dependencies File (requirements.txt)
+*(Place this in the root folder alongside app.py.)*
+
+```text
+flask
+requests
+python-bitcoinlib
