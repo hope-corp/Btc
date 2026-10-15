@@ -32,35 +32,47 @@ def call_rpc_node(method, params=None):
         response.raise_for_status() 
         rpc_result = response.json()
 
+        # Check for protocol errors returned by the node itself
         if 'error' in rpc_result:
-            # RPC protocol error detected
             return {"error_details": rpc_result['error']['message']}
 
         return rpc_result.get('result')
     except requests.exceptions.RequestException as e:
-        # Connection/HTTP failure
+        # Catch general connection or HTTP errors
         return {"error_details": f"CONNECTION FAILURE: {e}"}
-#=============================================#============================
-#TRANSACTION BUILDER (SIMPLIFIED):
+
+# ==========================================================================
+# TRANSACTION BUILDER (SIMPLIFIED):
+# ==========================================================================
 def create_submission_payload(amount_btc, destination_address, input_address, input_private_key):
     """
     Creates a dictionary payload optimized for direct RPC submission.
     """
     try:
+        # Initialize the transaction object
         tx = Transaction()
 
+        # Define and add the output address
         output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
+
+        # Add the input from the private key
         tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
         tx.add_fee() 
+
+        # Sign the transaction locally (Crucial step)
         tx.sign() 
+
+        # Serialize to raw hex format, which RPC node needs
         raw_tx_hex = tx.serialize()
         return raw_tx_hex
     except Exception as e:
+        # Raise an exception if any part of the construction fails
         raise Exception(f"Simplified Payload Failure: {str(e)}")
-#=============================================#============================
-#API Endpoints
-#=============================================#============================
+
+# ==========================================================================
+# API Endpoints
+# ==========================================================================
 @app.route('/', methods=['GET'])
 def index():
     """Serves the user interface form."""
@@ -75,6 +87,7 @@ def api_endpoint():
     input_address = data.get('input_address') 
     private_key = data.get('private_key') 
 
+    # Validate all necessary inputs are present
     if not amount_raw or not address_str or not input_address or not private_key:
         return jsonify({"error": "Missing Fields Error: Amount, Destination Address, Input Address, AND Private Key are required."}), 400
 
@@ -100,10 +113,7 @@ def api_endpoint():
         })
 
     except Exception as e:
-        # Catch all failures
+        # Catch all failures within the endpoint handler
         return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-
-## 📋 CODE BLOCK 2: Dependencies (requirements.txt)
-#**(Action: Place this file in the root directory alongside app.py.)**
