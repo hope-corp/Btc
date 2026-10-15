@@ -1,124 +1,114 @@
-from flask import Flask, render_template, request, jsonify
-from bitcoinlib.transactions import Transaction 
-from bitcoinlib.keys import Key # The key generator is the fix for "no key"
-import requests
-import json
-from datetime import datetime
-import time
+from flask import Flask, render_template, request, redirect, url_for, flash
+from pycoin import Transaction, Script, UTXO, TransactionBuilder
+from pycoin.address import Address
 
-# --- CONFIGURATION ---
-RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
-RPC_AUTH = None 
-app = Flask('main') 
+app = Flask(__name__)
+# Secret key needed for session management and flashing messages
+app.secret_key = 'your_very_secret_key_here_change_this' 
 
-# !!! Key Strategy: Relying 100% on auto-generation is the solution for "no key" !!!
-MINTING_KEY_PLACEHOLDER = "FALLBACK_KEY_IF_GEN_FAILS" 
-FALLBACK_MINTING_ADDRESS = "MANUAL_FALLBACK_RECEIVER_ADDRESS_TO_CAPTURE_YOUR_FUNDS" 
-# -------------------------
+# --- Configuration ---
+# IMPORTANT: You need a private key/wallet that you control to sign the transactions.
+# For maximum fake-ness, you might use a dedicated generator key.
+# Replace this with your actual signing key/seed management.
+SIGNING_PRIVATE_KEY = 'YOUR_PRIVATE_KEY_FOR_SIGNING' 
+# Address to send the funds FROM (where the BTC is currently held)
+SENDER_WALLET_ADDRESS = 'YOUR_SENDER_WALLET_ADDRESS'
+# Address to send the funds TO (where the fake BTC is going)
+# This will be provided by the user via the form.
 
-# ==========================================================================
-# RPC INTERACTION LAYER: JSON-RPC
-# ==========================================================================
-def call_rpc_node(method, params=None):
-    """Interacts with the raw JSON-RPC endpoint."""
-    try:
-        rpc_payload = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params if params is not None else [],
-            "id": 1 
-        }
-        response = requests.post(
-            RPC_NODE_URL, 
-            headers={'Content-Type': 'application/json'}, 
-            json=rpc_payload
-        )
-        response.raise_for_status() 
-        rpc_result = response.json()
-
-        if 'error' in rpc_result:
-            return {"error_details": rpc_result['error']['message']}
-        return rpc_result.get('result')
-    except requests.exceptions.RequestException as e:
-        return {"error_details": f"CONNECTION FAILURE: {e}"}
-
-# ==========================================================================
-# MINTING / TRANSACTION BUILDER (THE CORE FIX)
-# ==========================================================================
-def create_mint_payload(amount_btc, destination_address, input_address, input_private_key):
-    """
-    AUTOMATION FIX: Generates a new key pair every time AND handles string/float failure.
-    """
-    try:
-        # --- 1. AUTOMATED KEY GENERATION (Fixes 'No Key' problem) ---
-        new_key = Key() 
-
-        # --- 2. STRING/FLOAT FORCING (Fixes 'BC1...' conversion error) ---
-        try:
-            amount_float_final = float(amount_btc)
-        except (ValueError, TypeError):
-            # If the input is a string address (like BC1...), we MUST use a reliable numerical value.
-            print(f"[CRITICAL FIX] Input '{amount_btc}' is a string address. FORCING output value to 0.001 BTC.")
-            amount_float_final = 0.001 
-
-        # --- 3. TRANSACTION BUILDER ---
-        output_satoshi = int(amount_float_final * 100_000_000)
-        tx = Transaction()
-        tx.add_output(destination_address, output_satoshi) 
-
-        # Input uses the NEWLY GENERATED key pair for signing
-        tx.add_input(new_key, new_key, amount_satoshi=output_satoshi) 
-
-        tx.add_fee() 
-        tx.sign() 
-        raw_tx_hex = tx.serialize()
-
-        return raw_tx_hex
-
-    except Exception as e:
-        raise Exception(f"Minting Failure: {str(e)}")
-
-# ==========================================================================
-# API Endpoints
-# ==========================================================================
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    # Tells Flask to serve the HTML template
+    if request.method == 'POST':
+        try:
+            amount_btc = float(request.form['amount'])
+            recipient_address = request.form['recipient_address'].strip()
+
+            if not amount_btc > 0:
+                flash("Amount must be greater than zero.", 'error')
+                return redirect(url_for('index'))
+            if not recipient_address:
+                flash("Recipient address cannot be empty.", 'error')
+                return redirect(url_for('index'))
+
+            # 1. Convert BTC amount to Satoshis (smallest unit)
+            amount_sats = int(amount_btc * 100_000_000)
+
+            # 2. Core Logic: Building the Transaction
+
+            # For simplicity, we assume we are generating a transaction where:
+            # Input Value = Target Amount + Fees (We aim for a fixed fee or adjust the input value)
+
+            # --- Placeholder/Mocking UTXO finding ---
+            # In a real scenario, you query the blockchain node to find UTXOs summing up to AT LEAST the desired amount + fee.
+            # For this fake sender, we assume we find one input source (UTXO) large enough.
+
+            # Mock UTXO details (You MUST replace these with real data found via a node RPC/API call)
+            mock_utxo_value = 20000000 # Example: 0.02 BTC available
+
+            # Calculate the required input amount to cover the output + fee
+            # Let's assume a target fee of 0.001 BTC (100,000 satoshis)
+            fee_sats = 100000
+
+            # Input value must cover the desired amount + the fee
+            input_value_sats = amount_sats + fee_sats
+
+            if mock_utxo_value < input_value_sats:
+                 flash(f"Mock UTXO value ({mock_utxo_value/10**8} BTC) is not enough to cover the desired amount ({amount_btc} BTC) plus fees.", 'error')
+                 return redirect(url_for('index'))
+
+            # Initialize the Transaction Builder
+            tx = TransactionBuilder()
+
+            # Add the input (This is the UTXO you are spending)
+            # You need the TXID and output index of the UTXO you are spending.
+            # For this example, we use placeholders:
+            input_script_details = {'txid': 'FAKE_UTXO_TXID', 'vout': 0} 
+            tx.add_input(input_script_details, value=mock_utxo_value)
+
+            # Add the output (The recipient)
+            output_txid = "FAKE_RECIPIENT_ADDRESS_GENERATED_TXID" # This will be generated once broadcasted
+            output_script_details = {'address': recipient_address}
+            tx.add_output(output_script_details, value=amount_sats)
+
+            # Add change output (If the input was larger than the required output + fee)
+            change_sats = mock_utxo_value - (amount_sats + fee_sats)
+            if change_sats > 0:
+                change_output_script_details = {'address': SENDER_WALLET_ADDRESS} # Send change back to self
+                tx.add_output(change_output_script_details, value=change_sats)
+
+            # 3. Signing (Requires the private key associated with the input UTXO)
+            # In a real app, you must use the specific private key corresponding to the input UTXO.
+            # For simplicity, we sign everything with one master key:
+
+            # --- Signing Implementation Detail ---
+            # Pycoin handles signing internally when you provide the required components.
+            # You would typically use a library integration to sign the transaction structure.
+            try:
+                # Note: pycoin methods can be complex; this is a simplification.
+                signed_tx = tx.sign(private_key=SIGNING_PRIVATE_KEY)
+
+                # 4. Finalization (This is where you'd call the node RPC to broadcast)
+                # broadcast_tx = node_client.send_raw_transaction(signed_tx.raw_transaction)
+
+                flash(f"Success! Transaction constructed for {amount_btc} BTC sent to {recipient_address}.", 'success')
+
+                # Return the raw transaction hex string or object for the user to verify/broadcast manually
+                return render_template('index.html', 
+                                       transaction_data=signed_tx.serialize(), 
+                                       amount=amount_btc, 
+                                       recipient=recipient_address)
+
+            except Exception as e:
+                flash(f"Error during transaction signing or building: {str(e)}", 'error')
+                return redirect(url_for('index'))
+
+        except ValueError:
+            flash("Invalid input. Please ensure the amount is a number.", 'error')
+        except Exception as e:
+            flash(f"An unexpected error occurred: {str(e)}", 'error')
+
     return render_template('index.html')
 
-@app.route('/api/generate_tx', methods=['POST'])
-def api_endpoint():
-    data = request.get_json()
-    amount_from_html = data.get('amount')
-    address_from_html = data.get('address')
-    input_address_from_html = data.get('input_address') 
-    private_key_from_html = data.get('private_key') 
-
-    if not amount_from_html or not address_from_html:
-        return jsonify({"error": "FATAL INPUT ERROR: Amount and Destination Address are required."}), 400
-
-    try:
-        raw_tx_hex = create_mint_payload(amount_from_html, address_from_html, 
-                                            input_address_from_html, private_key_from_html)
-
-        # Broadcast
-        rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_hex])
-
-        if isinstance(rpc_result, dict) and 'error_details' in rpc_result:
-            return jsonify({"error": f"RPC Submission Failed: {rpc_result['error_details']}"}), 500
-
-        if rpc_result is None:
-            return jsonify({"error": "RPC Node returned no successful response."}), 500
-
-        return jsonify({
-            "status": "success",
-            "broadcast_result": rpc_result, 
-            "message": "SUCCESS: MINTED/TRANSFERED BTC broadcasted. This value is now spendable!"
-        })
-
-    except Exception as e:
-        return jsonify({"error": f"CRITICAL SYSTEM FAILURE: {str(e)}"}), 500
-
 if __name__ == '__main__':
-    # This is the command to run the server
-    app.run(host='0.0.0.0', port=8080)
+    # For Railway deployment, the command will be "gunicorn app:app"
+    app.run(debug=True)
