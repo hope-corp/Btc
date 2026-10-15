@@ -24,14 +24,13 @@
         <h1>₿ BTC Pure Mint Generator - DIG</h1>
         <p class="warning">⚠️ CRITICAL NOTE: The server MUST be configured with a valid MINTING_KEY_FOR_NEW_VALUE in app.py for the 'fake' BTC to be truly spendable on the network!</p>
 
-        <!-- SIMPLIFIED INPUTS - The minimum required -->
+        <!-- SIMPLIFIED INPUTS -->
         <label for="amount">BTC Amount to Mint (Value to be sent):</label>
         <input type="number" id="amount" value="0.001" step="0.00001" required>
 
         <label for="address">Destination Muun Wallet Address (Where the new BTC goes):</label>
         <input type="text" id="address" placeholder="Recipient BTC Address" required>
 
-        <!-- Hidden Complexity Note -->
         <p style="font-size: 0.9em; color: #555;">Source Address & Private Key are handled automatically by the server's MINTING_KEY. You don't need to worry about them!</p>
 
         <button id="generateBtn" onclick="generateTransaction()">
@@ -45,7 +44,8 @@
             <textarea id="transaction_output" readonly></textarea>
         </div>
     </div>
-
+</head>
+<body>
     <script>
         const btn = document.getElementById('generateBtn');
         const btnText = document.getElementById('btnText');
@@ -64,7 +64,7 @@
 
             // --- 2. Data Validation (Simplified) ---
             if (!amount || !address) {
-                statusEl.innerHTML = '&lt;strong style="color: red;"&gt;🛑 FATAL ERROR: Please enter both BTC Amount and Destination Address.&lt;/strong&gt;';
+                statusEl.innerHTML = '<strong>🛑 FATAL ERROR: Please enter both BTC Amount and Destination Address.</strong>';
                 btn.disabled = false;
                 btnText.textContent = '🚀 Generate, Sign, and Broadcast Transaction';
                 return;
@@ -92,7 +92,7 @@
 
                 // --- 5. Handling Server Response ---
                 if (response.ok) {
-                    statusEl.innerHTML = `&lt;span style="color: green;"&gt;✅ SUCCESS! ${data.message}&lt;/span&gt;`;
+                    statusEl.innerHTML = `<span>✅ SUCCESS! ${data.message}</span>`;
 
                     if (data.transaction_object) {
                         outputEl.value = JSON.stringify(data.transaction_object, null, 2);
@@ -104,14 +104,14 @@
                     }
                 } else {
                     const errorMessage = data.error || 'Unknown Server Error';
-                    statusEl.innerHTML = `&lt;strong style="color: red;"&gt;❌ ERROR (${response.status}): ${errorMessage}&lt;/strong&gt;`;
+                    statusEl.innerHTML = `<strong>❌ ERROR (${response.status}): ${errorMessage}</strong>`;
                     outputEl.value = "";
                 }
 
             } catch (error) {
                 // NETWORK ERROR
                 console.error("[FATAL FETCH ERROR]:", error);
-                statusEl.innerHTML = `&lt;strong style="color: red;"&gt;🛑 FATAL CONNECTION ERROR: Could not reach the server. Check your URL and network connection! (${error.message})&lt;/strong&gt;`;
+                statusEl.innerHTML = `<strong>🛑 FATAL CONNECTION ERROR: Could not reach the server. Check your URL and network connection! (${error.message})</strong>`;
                 outputEl.value = "";
             } finally {
                 // 6. Cleanup
