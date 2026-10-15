@@ -8,7 +8,7 @@ from datetime import datetime
 # --- CONFIGURATION ---
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 RPC_AUTH = None 
-----------------------
+# ----------------------
 app = Flask(name)
 
 # ==========================================================================
