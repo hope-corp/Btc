@@ -1,3 +1,4 @@
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,21 +8,21 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f4f4f9; }
         .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1 { color: #ff9900; text-align: center; }
-        p.warning { color: #cc0000; font-weight: bold; text-align: center; margin-bottom: 20px; }
+        .warning { color: #cc0000; font-weight: bold; text-align: center; margin-bottom: 20px; }
         label { display: block; margin-top: 15px; font-weight: bold; color: #333; }
         input[type="number"], input[type="text"] { width: 100%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
         button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background-color 0.3s; width: 100%; margin-bottom: 15px; }
         button:hover:not(:disabled) { background-color: #0056b3; }
         button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
         #output { margin-top: 30px; padding: 20px; border: 2px solid #ff9900; border-radius: 8px; background-color: #fffbe6; }
-        #status_message { font-weight: bold; margin-bottom: 15px; font-size: 1.1em;}
+        #status_message { font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
         #transaction_output { width: 100%; height: 250px; margin-top: 15px; font-family: monospace; padding: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>₿ BTC Pure Mint Generator</h1>
-        <p class="warning">⚠️ NOTE: Unsigned transactions rely on Trust-Based Acceptance by the network/wallet.</p>
+        <p class="warning">⚠️ IMPORTANT: Unsigned transactions rely on Trust-Based Acceptance by the network/wallet. If you have a private key, ensure it's set in the backend for cryptographic proof!</p>
 
         <label for="amount">BTC Amount to Mint (Value to be sent):</label>
         <input type="number" id="amount" value="0.001" step="0.00001" required>
@@ -42,7 +43,7 @@
     </div>
 
     <script>
-        // Function to manage UI states
+        // --- UI State Management Globals ---
         const btn = document.getElementById('generateBtn');
         const btnText = document.getElementById('btnText');
         const statusEl = document.getElementById('status_message');
@@ -50,7 +51,7 @@
 
         /**
          * Primary function called when the button is clicked.
-         * It encapsulates all error handling and state management.
+         * It manages all UI states, handles the API communication, and displays results/errors.
          */
         async function generateTransaction() {
             // 1. UI State Update (Locking the button)
@@ -71,7 +72,7 @@
             console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
             statusEl.textContent = '⏳ Sending request to Python Backend...';
 
-            // 3. API Fetch Call
+            // 3. Fetch API Call
             try {
                 const response = await fetch('/api/generate_tx', {
                     method: 'POST',
@@ -88,17 +89,14 @@
                     // Success Case: Backend confirmed transaction is ready/broadcasted
                     statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
 
-                    // Display the raw transaction structure (which could be hex or a dictionary)
+                    // Display the raw transaction object (which should be the dictionary)
                     if (data.transaction_object) {
-                         // Display as formatted JSON for readability if it's a dict
                          outputEl.value = JSON.stringify(data.transaction_object, null, 2);
                     } else {
                          outputEl.value = "Transaction structure is empty.";
                     }
-
-                    // Display broadcast info if available
                     if(data.broadcast_result) {
-                        outputEl.value += `\n\n[--- BROADCAST INFO ---]\nBroadcasted TxID: ${data.broadcast_result}`;
+                        outputEl.value += "\n\n[--- BROADCAST INFO ---]\nBroadcasted TxID: " + data.broadcast_result;
                     }
 
                 } else {
