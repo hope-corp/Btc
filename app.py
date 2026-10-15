@@ -40,7 +40,7 @@ def call_rpc_node(method, params=None):
     except requests.exceptions.RequestException as e:
         # Connection/HTTP failure
         return {"error_details": f"CONNECTION FAILURE: {e}"}
-=========================================================================
+#=============================================#============================
 TRANSACTION BUILDER (SIMPLIFIED):
 def create_submission_payload(amount_btc, destination_address, input_address, input_private_key):
     """
@@ -58,9 +58,9 @@ def create_submission_payload(amount_btc, destination_address, input_address, in
         return raw_tx_hex
     except Exception as e:
         raise Exception(f"Simplified Payload Failure: {str(e)}")
-=========================================================================
-API Endpoints
-=========================================================================
+#=============================================#============================
+#API Endpoints
+#=============================================#============================
 @app.route('/', methods=['GET'])
 def index():
     """Serves the user interface form."""
