@@ -130,4 +130,4 @@ if __name__ == '__main__':
 
 
 ## 📋 CODE BLOCK 2: Dependencies ($\text{requirements.txt}$)
-**ACTION:** Place this file in the root directory alongside $\text{app.py}$.
+#**ACTION:** Place this file in the root directory alongside $\text{app.py}$.
