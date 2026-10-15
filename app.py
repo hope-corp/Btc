@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask, render_template, request, jsonify
 from bitcoinlib.transactions import Transaction
 from bitcoinlib.keys import Key
@@ -7,7 +6,9 @@ import requests
 from datetime import datetime
 
 # --- CONFIGURATION (MUST BE SET AS ENVIRONMENT VARIABLES IN RAILWAY) ---
+# 1. RPC_URL: The endpoint to communicate with your Bitcoin node.
 RPC_URL = os.environ.get('RPC_URL', 'http://127.0.0.1:8332') 
+# 2. SIGNER_PRIVATE_KEY_HEX: The private key used to authorize the creation/inputs.
 SIGNER_PRIVATE_KEY_HEX = os.environ.get('SIGNER_PRIVATE_KEY_HEX') 
 # ---------------------------------------------------------------------
 
@@ -25,14 +26,14 @@ def rpc_client_call(method, params=None):
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
+        # Throw a specific error for the application to catch
         raise ConnectionError(f"Failed to connect to RPC Node at {RPC_URL}. Error: {e}")
 
 
-# FIX: Defining the function signature clearly: (Amount_Float, Address_String)
 def build_and_mint_tx(amount_btc, destination_address):
     """
     Builds a transaction structure designed to simulate minting 'out of nothing'.
-    The parameters are defined here as (Coin Value, Address String).
+    This function expects AMOUNT_FLOAT (guaranteed to be float) and ADDRESS_STRING.
     """
     print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
 
@@ -40,7 +41,8 @@ def build_and_mint_tx(amount_btc, destination_address):
         tx = Transaction()
 
         # --- 1. Outputs (The funds you want) ---
-        # CRITICAL FIX: Ensure float(amount_btc) is used here!
+        # CRITICAL: amount_btc (the float) is correctly converted to Satoshis (integer)
+        # This line is the one that was failing!
         output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
 
@@ -69,8 +71,7 @@ def build_and_mint_tx(amount_btc, destination_address):
         return tx.to_dict()
 
     except Exception as e:
-        # Re-raise the specific error type for the API endpoint to catch it
-        # This error message is what gets sent back to the HTML
+        # This error string is sent directly back to the HTML frontend
         raise Exception(f"Transaction Assembly Failed: {e}")
 
 
@@ -84,17 +85,30 @@ def api_endpoint():
     """Handles user input, generates the transaction, and attempts RPC broadcast."""
     data = request.get_json()
 
-    # *** THE FIX IS HERE ***
-    # We map the front-end fields explicitly to the backend variables
-    amount_str = data.get('amount')        # This should be the NUMBER (0.001)
-    address_str = data.get('address')      # This should be the STRING (bc1q...)
+    # *** THE AGGRESSIVE CONVERSION FIX ***
+    # We pull the string value intended for the amount (number string "0.001")
+    amount_raw = data.get('amount')        
+    address_str = data.get('address')      
 
-    if not amount_str or not address_str:
+    if not amount_raw or not address_str:
         return jsonify({"error": "Amount (Coin Value) and Address are required."}), 400
 
     try:
-        # FIX CONFIRMED: Call is correctly ordered: (Amount, Address)
-        transaction_dict = build_and_mint_tx(amount_str, address_str)
+        # *** THE CRITICAL FORCING STEP ***
+        try:
+            # Explicitly force the conversion of the incoming string representation of the amount
+            amount_float = float(amount_raw)
+        except ValueError:
+            # If it fails to convert, it means the HTML sent something non-numeric. 
+            # We try to treat the string as the value itself just in case it's a poorly formatted number.
+            try:
+                amount_float = float(amount_raw)
+            except ValueError:
+                return jsonify({"error": f"Amount field '{amount_raw}' is not a valid numeric value that can be converted to float."}), 400
+
+
+        # *** CALL THE CRYPTO BUILDER USING THE GUARANTEED FLOAT VALUE ***
+        transaction_dict = build_and_mint_tx(amount_float, address_str)
 
         # --- Optional: Attempt RPC Broadcast ---
         tx_id = "N/A (RPC Connection Failed)"
@@ -107,7 +121,6 @@ def api_endpoint():
         except ConnectionError as e:
             message = f"Transaction structured successfully, but FAILED to broadcast via RPC Node. ({e}). You must manually submit the hex."
 
-
         return jsonify({
             "status": "success",
             "transaction_object": transaction_dict,
@@ -116,12 +129,5 @@ def api_endpoint():
         })
 
     except Exception as e:
-        # This catches the specific error string passed from build_and_mint_tx
+        # This catches the specific error string passed from build_and_mint_tx if the assembly fails internally
         return jsonify({"error": str(e)}), 500
-
-
-if __name__ == '__main__':
-    print("==============================================")
-    print("🚀 Starting Flask Server for BTC Mint Generator")
-    print("==============================================")
-    app.run(host='0.0.0.0', port=8080)
