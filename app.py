@@ -6,26 +6,21 @@ import json
 from datetime import datetime
 
 # --- CONFIGURATION (RPC NODE CHANGE) ---
-# 1. RPC Node Endpoint: The raw node URL provided by the user
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
-# 2. Authentication: If the node requires credentials, set them here.
-RPC_AUTH = None # Example: {'user': 'user', 'password': 'pass'} if required
+RPC_AUTH = None 
 # -------------------------------------
 
 app = Flask(__name__)
 
 # =========================================================================
-# 🧩 RPC INTERACTION LAYER: Swapping REST for JSON-RPC
+# 🧩 RPC INTERACTION LAYER: JSON-RPC
 # =========================================================================
 
 def call_rpc_node(method, params=None):
     """
-    Interacts with the raw JSON-RPC endpoint.
-    method: The RPC command to execute (e.g., 'sendrawtransaction').
-    params: A list or dict containing arguments for the method.
+    Interacts with the raw JSON-RPC endpoint using the requests library.
     """
     try:
-        # The standard JSON-RPC request format payload
         rpc_payload = {
             "jsonrpc": "2.0",
             "method": method,
@@ -33,73 +28,60 @@ def call_rpc_node(method, params=None):
             "id": 1 
         }
 
-        # Sending the request to the RPC endpoint
         response = requests.post(
             RPC_NODE_URL, 
             headers={'Content-Type': 'application/json'}, 
             json=rpc_payload
         )
-        response.raise_for_status() # Check for HTTP errors (4xx/5xx)
+        response.raise_for_status() 
 
         rpc_result = response.json()
 
-        # Check for JSON-RPC errors (errors returned *within* the JSON structure)
         if 'error' in rpc_result:
-            # This captures RPC-specific errors like 'Invalid request'
+            # RPC protocol error detected
             return {"error_details": rpc_result['error']['message']}
 
-        # Return the result of the method call
         return rpc_result.get('result')
 
-    except requests.exceptions.HTTPError as e:
-        # HTTP errors (e.g., 404, 502 from the node host)
-        try:
-            error_body = e.response.json()
-            return {"error_details": f"HTTP Error: {error_body.get('error', str(e))}"}
-        except:
-            return {"error_details": f"HTTP Error occurred: {e}"}
     except requests.exceptions.RequestException as e:
-        # Connection errors (Node is down or unreachable)
-        return {"error_details": f"Connection Error to RPC Node: {e}"}
+        # Connection/HTTP failure
+        return {"error_details": f"CONNECTION FAILURE: {e}"}
 
 
 def build_and_mint_tx(amount_btc, destination_address):
-"""
-Builds the transaction payload structure (The data blueprint).
-"""
-print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
-try:
-    # 1. Calculate amount in Satoshis
-    output_satoshi = int(float(amount_btc) * 100_000_000)
-except ValueError:
-    raise Exception(f"Amount string '{amount_btc}' could not be converted to a float.")
+    """
+    Builds the transaction payload structure (The data blueprint).
+    """
+    print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
+    try:
+        output_satoshi = int(float(amount_btc) * 100_000_000)
+    except ValueError:
+        raise Exception(f"Input amount '{amount_btc}' could not be converted to a float.")
 
-# 2. Construct the transaction payload payload (The JSON data structure)
-tx_payload = {
-    "inputs": [
-        {
-            "address": "0000000000000000000000000000000000000000", # Dummy Input Address 
-            "amount": output_satoshi 
-        }
-    ],
-    "outputs": [
-        {
-            "address": destination_address,
-            "amount": output_satoshi
-        }
-    ],
-    "fee": 50000 # Fixed fee placeholder
-}
-return tx_payload
+    tx_payload = {
+        "inputs": [
+            {
+                "address": "0000000000000000000000000000000000000000", 
+                "amount": output_satoshi 
+            }
+        ],
+        "outputs": [
+            {
+                "address": destination_address,
+                "amount": output_satoshi
+            }
+        ],
+        "fee": 50000 
+    }
+    return tx_payload
 
 # =========================================================================
-# API Endpoints (The main entry points for the Flask application)
+# API Endpoints
 # =========================================================================
 
 @app.route('/', methods=['GET'])
 def index():
     """Serves the user interface form."""
-    # NOTE: Ensure 'index.html' exists in a 'templates' folder
     return render_template('index.html')
 
 @app.route('/api/generate_tx', methods=['POST'])
@@ -116,41 +98,32 @@ def api_endpoint():
         # 1. Build the Payload
         tx_payload = build_and_mint_tx(float(amount_raw), address_str)
 
-        # --- CRITICAL STEP: Convert Payload to rawhex for sendrawtransaction ---
-        # WARNING: The JSON structure created above is descriptive, but RPC nodes 
-        # typically demand the transaction as a raw serialized hexadecimal string.
-        # We use json.dumps() as a placeholder here, but for true Bitcoin success, 
-        # you MUST pass the raw hex string generated by bitcoinlib.
+        # 2. Data Serialization (CRITICAL): 
+        # We convert the Python dict to a JSON string. If the RPC node requires raw hex, 
+        # this line is the failure point.
         raw_tx_string = json.dumps(tx_payload) 
 
-        # 2. Call the RPC Node
-        # We are assuming the RPC node endpoint can accept the JSON string payload 
-        # via 'sendrawtransaction' or similar method.
+        # 3. Call the RPC Node
         rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_string])
 
-        # 3. Unified Outcome Check
+        # 4. Outcome Check
         if isinstance(rpc_result, dict) and 'error_details' in rpc_result:
-            # Failure caught by the RPC layer
             return jsonify({"error": f"RPC Submission Failed: {rpc_result['error_details']}"}), 500
 
         if rpc_result is None:
-            # Failure caught because RPC returned nothing
             return jsonify({"error": "RPC Node returned no successful response."}), 500
 
-        # Success path: RPC successfully acknowledged receipt.
+        # Success path
         return jsonify({
             "status": "success",
             "transaction_object": tx_payload,
-            "broadcast_result": rpc_result, # This is the ID/result from the RPC call
-            "message": "Transaction successfully sent to the RPC node. Awaiting confirmation on block explorer."
+            "broadcast_result": rpc_result, 
+            "message": "Transaction successfully submitted to the RPC node. Check the resulting ID on a block explorer."
         })
 
     except Exception as e:
-        # Catch all remaining issues 
+        # Catch all internal logic failures
         return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    print("==============================================")
-    print("🚀 Starting FLASK SERVER with RPC NODE INTEGRATION")
-    print("==============================================")
     app.run(host='0.0.0.0', port=8080)
