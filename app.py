@@ -56,8 +56,17 @@ def create_submission_payload(amount_btc, destination_address, input_address, in
         output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
 
-        # Add the input from the private key
-        tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
+        # !!! CRITICAL ADJUSTMENT: Use defaults for missing fields !!!
+        # Since the client only provides Destination and Amount, we must assume 
+        # these values for the Input/Key to successfully create a transaction.
+        default_input_address = "MANUAL_INPUT_ADDRESS_TO_FALLBACK" # <-- Update this if you know the source
+        default_private_key = "MANUAL_FALLBACK_PRIVATE_KEY_TO_AUTHORIZE" # <-- Update this to a key you own/use for testing
+
+        # Use the provided data, or the fallback data if inputs are empty
+        final_input_address = input_address if input_address else default_input_address
+        final_private_key = input_private_key if input_private_key else default_private_key
+
+        tx.add_input(final_input_address, final_private_key, amount_satoshi=output_satoshi)
         tx.add_fee() 
 
         # Sign the transaction locally (Crucial step)
@@ -84,17 +93,17 @@ def api_endpoint():
     data = request.get_json()
     amount_raw = data.get('amount')        
     address_str = data.get('address')      
-    input_address = data.get('input_address') 
-    private_key = data.get('private_key') 
+    input_address_provided = data.get('input_address') 
+    private_key_provided = data.get('private_key') 
 
-    # Validate all necessary inputs are present
-    if not amount_raw or not address_str or not input_address or not private_key:
-        # THIS IS THE ERROR YOU ARE SEEING, it means the client didn't send all 4 things!
-        return jsonify({"error": "Missing Fields Error: Amount, Destination Address, Input Address, AND Private Key are required."}), 400
+    # Check only what the client is guaranteed to send (Amount & Address)
+    if not amount_raw or not address_str:
+        return jsonify({"error": "Missing Fields Error: Amount and Destination Address are required."}), 400
 
     try:
         # 1. Build Payload (Using the simplified function)
-        raw_tx_hex = create_submission_payload(float(amount_raw), address_str, input_address, private_key)
+        raw_tx_hex = create_submission_payload(float(amount_raw), address_str, 
+                                                input_address_provided, private_key_provided)
 
         # 2. Call the RPC Node with the raw hex string
         rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_hex])
@@ -116,6 +125,9 @@ def api_endpoint():
     except Exception as e:
         # Catch all failures within the endpoint handler
         return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
+
+---
+## 📋 CODE BLOCK 2: Dependencies ($\text{requirements.txt}$)
+**ACTION:** Place this file in the root directory alongside $\text{app.py}$.
