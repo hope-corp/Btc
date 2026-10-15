@@ -12,8 +12,8 @@ RPC_AUTH = None
 app = Flask(name)
 
 # ==========================================================================
-# 🧩 RPC INTERACTION LAYER: JSON-RPC
-=========================================================================
+# RPC INTERACTION LAYER: JSON-RPC
+# ==========================================================================
 def call_rpc_node(method, params=None):
 """
 Interacts with the raw JSON-RPC endpoint.
@@ -45,7 +45,7 @@ except requests.exceptions.RequestException as e:
     # Connection/HTTP failure
     return {"error_details": f"CONNECTION FAILURE: {e}"}
 =========================================================================
-✍️ TRANSACTION BUILDING AND SIGNING LOGIC (THE FIX)
+TRANSACTION BUILDING AND SIGNING LOGIC (THE FIX)
 def build_and_mint_tx(amount_btc, destination_address, input_address, input_private_key):
 """
 Constructs the TX object, adds outputs, and signs it locally.
@@ -125,14 +125,5 @@ try:
 except Exception as e:
     # Catch all failures
     return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
-if name == 'main':
-app.run(host='0.0.0.0', port=8080)
-
----
-## 📝 Code Block 2: The Dependencies File (requirements.txt)
-*(Place this in the root folder alongside app.py.)*
-
-```text
-flask
-requests
-python-bitcoinlib
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
