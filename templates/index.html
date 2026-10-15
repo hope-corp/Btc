@@ -48,10 +48,6 @@
         const statusEl = document.getElementById('status_message');
         const outputEl = document.getElementById('transaction_output');
 
-        /**
-         * Primary function called when the button is clicked.
-         * It manages all UI states, handles the API communication, and displays results/errors.
-         */
         async function generateTransaction() {
             // 1. UI State Update (Locking the button)
             btn.disabled = true;
@@ -71,7 +67,7 @@
             console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
             statusEl.textContent = '⏳ Sending request to Python Backend...';
 
-            // 3. API Fetch Call
+            // 3. Fetch API Call
             try {
                 const response = await fetch('/api/generate_tx', {
                     method: 'POST',
@@ -85,10 +81,8 @@
 
                 // 4. Handling Server Response
                 if (response.ok) {
-                    // Success Case: Backend confirmed transaction is ready/broadcasted
                     statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
 
-                    // Display the raw transaction structure (which should be the dictionary)
                     if (data.transaction_object) {
                          outputEl.value = JSON.stringify(data.transaction_object, null, 2);
                     } else {
@@ -114,7 +108,6 @@
                 // 5. Cleanup (Always run this)
                 btn.disabled = false;
                 btnText.textContent = '🚀 Generate, Sign (or Trust), and Broadcast';
-                console.log("[UI Debug] Transaction attempt cycle completed.");
             }
         }
     </script>
