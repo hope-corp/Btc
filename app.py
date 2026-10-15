@@ -128,20 +128,3 @@ def api_endpoint():
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
 
----
-
-## 💾 CODE BLOCK 2: Dependencies ($\text{requirements.txt}$)
-**ACTION:** Place this file in the root directory alongside $\text{app.py}$.
-flask
-requests
-python-bitcoinlib
-
----
-## 🖥️ CODE BLOCK 3: Client Interface ($\text{templates/index.html}$)
-**ACTION:** Use the comprehensive HTML structure provided previously, ensuring it maps physical user inputs correctly to the logical names ($\text{amount}$, $\text{address}$, etc.) that the $\text{app.py}$ backend now expects.
-
----
-# 🎯 FINAL ACTION PLAN (The Solution)
-**IF YOU ARE USING THIS CODE:**
-1.  **If you are using the simple frontend (Address + Amount only):** You **MUST** update the $\text{default\_input\_address}$ and $\text{default\_private\_key}$ inside the $\text{create\_submission\_payload}$ function to valid, real-world data that you know works for the testing network.
-2.  **If you are using the full frontend:** Ensure your client is sending all four required fields ($\text{amount}$, $\text{address}$, $\text{input\_address}$, $\text{private\_key}$).
