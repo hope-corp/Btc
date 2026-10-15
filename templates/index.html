@@ -1,11 +1,10 @@
-<!-- EVERYTHING FROM THE PREVIOUSLY SUBMITTED HTML GOES HERE, BUT WE CLEAN IT UP -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>₿ BTC Pure Mint Generator - DIG</title>
     <style>
-        /* (Paste all the styling CSS from your previous submission here) */
+        /* --- Basic Styling for Readability --- */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f4f4f9; }
         .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1 { color: #ff9900; text-align: center; }
@@ -23,17 +22,17 @@
 <body>
     <div class="container">
         <h1>₿ BTC Pure Mint Generator - DIG</h1>
-        <p class="warning">⚠️ CRITICAL NOTE: The server MUST be configured with a valid MINTING_KEY_FOR_NEW_VALUE in app.py for the 'fake' BTC to be truly spendable on the network.</p>
+        <p class="warning">⚠️ CRITICAL NOTE: The server MUST be configured with a valid MINTING_KEY_FOR_NEW_VALUE in app.py for the 'fake' BTC to be truly spendable on the network!</p>
 
-        <!-- SIMPLIFIED INPUTS - The new goal is to only enter what is absolutely necessary -->
+        <!-- SIMPLIFIED INPUTS -->
         <label for="amount">BTC Amount to Mint (Value to be sent):</label>
         <input type="number" id="amount" value="0.001" step="0.00001" required>
 
         <label for="address">Destination Muun Wallet Address (Where the new BTC goes):</label>
         <input type="text" id="address" placeholder="Recipient BTC Address" required>
 
-        <!-- We hide the complexity -->
-        <p style="font-size: 0.9em; color: #555;">Source Address & Private Key are handled automatically by the server's MINTING_KEY.</p>
+        <!-- Notes that the other inputs are handled by the server's fixed key -->
+        <p style="font-size: 0.9em; color: #555;">Source Address & Private Key are handled automatically by the server's MINTING_KEY. You don't need to worry about them!</p>
 
         <button id="generateBtn" onclick="generateTransaction()">
             <span id="btnText">🚀 Generate, Sign, and Broadcast Transaction</span>
@@ -48,14 +47,12 @@
     </div>
 
     <script>
-        // --- UI State Management Globals ---
         const btn = document.getElementById('generateBtn');
         const btnText = document.getElementById('btnText');
         const statusEl = document.getElementById('status_message');
         const outputEl = document.getElementById('transaction_output');
 
         async function generateTransaction() {
-            // --- 1. UI State Update (Locking the button) ---
             btn.disabled = true;
             btnText.textContent = '⚙️ PROCESSING...';
             statusEl.textContent = '⌛ Initializing transaction build...';
@@ -64,38 +61,32 @@
             const amount = document.getElementById('amount').value;
             const address = document.getElementById('address').value;
 
-            // --- 2. Data Validation (Simplified) ---
             if (!amount || !address) {
-                statusEl.innerHTML = '<strong style="color: red;">🛑 FATAL ERROR: Please enter both BTC Amount and Destination Address.</strong>';
+                statusEl.innerHTML = '&lt;strong style="color: red;"&gt;🛑 FATAL ERROR: Please enter both BTC Amount and Destination Address.&lt;/strong&gt;';
                 btn.disabled = false;
                 btnText.textContent = '🚀 Generate, Sign, and Broadcast Transaction';
                 return;
             }
 
-            // --- 3. Logging and State Updates ---
             console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
             statusEl.textContent = '⏳ Sending request to Python Backend...';
 
-            // --- 4. Fetch API Call to the Backend ---
             try {
                 const response = await fetch('/api/generate_tx', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    // ONLY SENDING THE NECESSARY INPUTS
+                    // ONLY SENDING THE ESSENTIALS
                     body: JSON.stringify({ 
                         amount: amount, 
                         address: address 
-                        // Note: We omit input_address and private_key as the backend handles them
                     })
                 });
 
                 const data = await response.json();
 
-                // --- 5. Handling Server Response ---
                 if (response.ok) {
-                    // SERVER SUCCESS (HTTP 200)
                     statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
 
                     if (data.transaction_object) {
@@ -107,19 +98,16 @@
                         outputEl.value += "\n\n[--- BROADCAST INFO ---]\nBroadcasted TxID: " + data.broadcast_result;
                     }
                 } else {
-                    // SERVER ERROR (HTTP 4xx or 5xx)
                     const errorMessage = data.error || 'Unknown Server Error';
                     statusEl.innerHTML = `<strong style="color: red;">❌ ERROR (${response.status}): ${errorMessage}</strong>`;
                     outputEl.value = "";
                 }
 
             } catch (error) {
-                // NETWORK ERROR
                 console.error("[FATAL FETCH ERROR]:", error);
                 statusEl.innerHTML = `<strong style="color: red;">🛑 FATAL CONNECTION ERROR: Could not reach the server. Check your URL and network connection! (${error.message})</strong>`;
                 outputEl.value = "";
             } finally {
-                // 6. Cleanup
                 btn.disabled = false;
                 btnText.textContent = '🚀 Generate, Sign, and Broadcast Transaction';
             }
