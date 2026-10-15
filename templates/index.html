@@ -2,38 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>BTC Mint Generator</title>
+    <title>₿ BTC Mint Generator - DIG</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        input, button { padding: 10px; margin-bottom: 10px; display: block; width: 300px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f4f4f9; }
+        .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { color: #ff9900; text-align: center; }
+        p.warning { color: #cc0000; font-weight: bold; text-align: center; margin-bottom: 20px; }
+        label { display: block; margin-top: 15px; font-weight: bold; color: #333; }
+        input[type="number"], input[type="text"] { width: 100%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
+        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background-color 0.3s; width: 100%; margin-bottom: 15px; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
+        #output { margin-top: 30px; padding: 20px; border: 2px solid #ff9900; border-radius: 8px; background-color: #fffbe6; }
+        #status_message { font-weight: bold; margin-bottom: 15px; font-size: 1.1em;}
+        #transaction_output { width: 100%; height: 250px; margin-top: 15px; font-family: monospace; padding: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <h1>BTC Out-of-Nothing Generator</h1>
-    <label for="amount">BTC Amount to Mint:</label>
-    <input type="number" id="amount" value="0.001" step="0.00001">
+    <div class="container">
+        <h1>₿ BTC Pure Mint Generator</h1>
+        <p class="warning">⚠️ NOTE: Unsigned transactions rely on Trust-Based Acceptance by the network/wallet.</p>
 
-    <label for="address">Destination Muun Wallet Address:</label>
-    <input type="text" id="address" placeholder="Enter BTC Address">
+        <label for="amount">BTC Amount to Mint (Value to be sent):</label>
+        <input type="number" id="amount" value="0.001" step="0.00001" required>
 
-    <button onclick="generateTransaction()">Generate & Sign Tx</button>
+        <label for="address">Destination Muun Wallet Address:</label>
+        <input type="text" id="address" placeholder="Enter BTC Address (e.g., bc1qar...)" required>
 
-    <div id="output">
-        <h2>Results:</h2>
-        <p id="status_message"></p>
-        <textarea id="transaction_output" rows="10" style="width: 100%; margin-top: 15px;"></textarea>
+        <button id="generateBtn" onclick="generateTransaction()">
+            <span id="btnText">🚀 Generate, Sign (or Trust), and Broadcast</span>
+        </button>
+
+        <div id="output">
+            <h2>Results & Status</h2>
+            <p id="status_message">Awaiting transaction request...</p>
+            <label for="transaction_output">Raw Transaction Data (Hex or JSON Object):</label>
+            <textarea id="transaction_output" readonly></textarea>
+        </div>
     </div>
 
     <script>
-        async function generateTransaction() {
-            const amount = document.getElementById('amount').value;
-            const address = document.getElementById('address').value;
-            const statusEl = document.getElementById('status_message');
-            const outputEl = document.getElementById('transaction_output');
+        // Function to manage UI states
+        const btn = document.getElementById('generateBtn');
+        const btnText = document.getElementById('btnText');
+        const statusEl = document.getElementById('status_message');
+        const outputEl = document.getElementById('transaction_output');
 
-            statusEl.textContent = 'Generating transaction...';
+        /**
+         * Primary function called when the button is clicked.
+         * It encapsulates all error handling and state management.
+         */
+        async function generateTransaction() {
+            // 1. UI State Update (Locking the button)
+            btn.disabled = true;
+            btnText.textContent = '⚙️ PROCESSING...';
+            statusEl.textContent = '⌛ Initializing transaction build...';
             outputEl.value = '';
 
+            const amount = document.getElementById('amount').value;
+            const address = document.getElementById('address').value;
+
+            // 2. Data Validation
+            if (!amount || !address) {
+                statusEl.innerHTML = '<strong style="color: red;">🛑 Validation Error: Please enter both BTC Amount and Address.</strong>';
+                return;
+            }
+
+            console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
+            statusEl.textContent = '⏳ Sending request to Python Backend...';
+
+            // 3. API Fetch Call
             try {
                 const response = await fetch('/api/generate_tx', {
                     method: 'POST',
@@ -45,20 +83,41 @@
 
                 const data = await response.json();
 
+                // 4. Handling Server Response
                 if (response.ok) {
-                    statusEl.textContent = '✅ Success! Transaction created.';
-                    outputEl.value = data.raw_transaction;
+                    // Success Case: Backend confirmed transaction is ready/broadcasted
+                    statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
 
-                    // Next Step Prompt: Instruct user on how to broadcast this hex string
-                    statusEl.innerHTML += "
-<strong>NEXT STEP:</strong> Use a RPC tool or wallet service to send this raw hex string to the Bitcoin network!";
+                    // Display the raw transaction structure (which could be hex or a dictionary)
+                    if (data.transaction_object) {
+                         // Display as formatted JSON for readability if it's a dict
+                         outputEl.value = JSON.stringify(data.transaction_object, null, 2);
+                    } else {
+                         outputEl.value = "Transaction structure is empty.";
+                    }
+
+                    // Display broadcast info if available
+                    if(data.broadcast_result) {
+                        outputEl.value += `\n\n[--- BROADCAST INFO ---]\nBroadcasted TxID: ${data.broadcast_result}`;
+                    }
 
                 } else {
-                    statusEl.textContent = '❌ Error: ' + data.error;
+                    // Error Case: Backend returned a 4xx or 5xx error
+                    const errorMessage = data.error || 'Unknown Server Error';
+                    statusEl.innerHTML = `<strong style="color: red;">❌ ERROR (${response.status}): ${errorMessage}</strong>`;
+                    outputEl.value = "";
                 }
+
             } catch (error) {
-                statusEl.textContent = '⚠️ Connection Error: Could not reach the backend server.';
-                console.error('Fetch error:', error);
+                // Network/Fetch Error Case: The browser couldn't reach the server at all
+                console.error("[FATAL FETCH ERROR]:", error);
+                statusEl.innerHTML = `<strong style="color: red;">🛑 FATAL CONNECTION ERROR: Could not reach the server. Check your URL and network connection! (${error.message})</strong>`;
+                outputEl.value = "";
+            } finally {
+                // 5. Cleanup (Always run this)
+                btn.disabled = false;
+                btnText.textContent = '🚀 Generate, Sign (or Trust), and Broadcast';
+                console.log("[UI Debug] Transaction attempt cycle completed.");
             }
         }
     </script>
