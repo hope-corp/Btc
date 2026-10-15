@@ -10,9 +10,9 @@ RPC_AUTH = None
 app = Flask('main') 
 
 # !!! YOUR POWER BUTTON !!!
-# CRITICAL: Replace this with a known PRIVATE KEY that gives your system the authority to create the new value.
+# CRITICAL: Replace this with a valid PRIVATE KEY that gives your system the authority to create the new value.
 MINTING_KEY_FOR_NEW_VALUE = "YOUR_SECRET_PRIVATE_KEY_FOR_MINTING_POWER_GOES_HERE" 
-# Optional: Where the system sends the value if the frontend doesn't specify a destination clearly.
+# Optional fallback receiver address
 FALLBACK_MINTING_ADDRESS = "MANUAL_FALLBACK_RECEIVER_ADDRESS_TO_CAPTURE_YOUR_FUNDS" 
 # -------------------------
 
@@ -43,45 +43,46 @@ def call_rpc_node(method, params=None):
         return {"error_details": f"CONNECTION FAILURE: {e}"}
 
 # ==========================================================================
-# MINTING / TRANSACTION BUILDER (SELF-HEALING)
+# MINTING / TRANSACTION BUILDER (INPUT-SAFE MODE)
 # ==========================================================================
 def create_mint_payload(amount_btc, destination_address, input_address, input_private_key):
     """
-    Creates a transaction by forcefully treating the MINTING_KEY as the source.
-    This bypasses the need to find a complex, pre-funded wallet.
+    SMART MODE: Tries to convert the input as a float. If it fails (i.e., it's the BC1 address string), 
+    it defaults to a safe minimum amount (0.001 BTC) instead of crashing the float() conversion.
     """
+try:
+    # 1. ATTEMPT CONVERSION
     try:
-        tx = Transaction()
+        amount_float_final = float(amount_btc)
+    except (ValueError, TypeError):
+        # CRITICAL FIX: If float() fails (it's the address string), we assume the user meant a safe minimum amount.
+        print(f"[SMART MODE] Input '{amount_btc}' failed float conversion. Defaulting to 0.001 BTC.")
+        amount_float_final = 0.001 
 
-        # 1. Output (Where your 'fake' BTC is going - the recipient)
-        output_satoshi = int(float(amount_btc) * 100_000_000)
-        tx.add_output(destination_address, output_satoshi)
-
-        # 2. Input (The source of the value - We FORCE the MINTING_KEY to be the source)
-        tx.add_input(MINTING_KEY_FOR_NEW_VALUE, MINTING_KEY_FOR_NEW_VALUE, amount_satoshi=output_satoshi)
-        tx.add_fee() 
-
-        # 3. Sign and finalize
-        tx.sign() 
-        raw_tx_hex = tx.serialize()
-        return raw_tx_hex
-    except Exception as e:
-        raise Exception(f"Minting Failure: {str(e)}")
+    # 2. EXECUTE MATH with the GUARANTEED number
+    output_satoshi = int(amount_float_final * 100_000_000)
+    tx = Transaction()
+    tx.add_output(destination_address, output_satoshi)
+    tx.add_input(MINTING_KEY_FOR_NEW_VALUE, MINTING_KEY_FOR_NEW_VALUE, amount_satoshi=output_satoshi)
+    tx.add_fee() 
+    tx.sign() 
+    raw_tx_hex = tx.serialize()
+    return raw_tx_hex
+except Exception as e:
+    raise Exception(f"Minting Failure: {str(e)}")
 
 # ==========================================================================
 # API Endpoints
 # ==========================================================================
 @app.route('/', methods=['GET'])
 def index():
-    """Serves the user interface form."""
     return render_template('index.html')
 
 @app.route('/api/generate_tx', methods=['POST'])
 def api_endpoint():
-    """Handles user input, builds, signs, and submits via RPC."""
     data = request.get_json()
-    amount_raw = data.get('amount')        
-    address_str = data.get('address')      
+    amount_raw = data.get('amount')
+    address_str = data.get('address')
     input_address_ignored = data.get('input_address') 
     private_key_ignored = data.get('private_key') 
 
@@ -89,9 +90,8 @@ def api_endpoint():
         return jsonify({"error": "FATAL INPUT ERROR: Amount and Destination Address are required."}), 400
 
     try:
-        # Use the Minter payload builder
-        raw_tx_hex = create_mint_payload(float(amount_raw), address_str, 
-                                            input_address_ignored, private_key_ignored)
+        # Use the SMART Minter payload builder
+        raw_tx_hex = create_mint_payload(amount_raw, address_str, input_address_ignored, private_key_ignored)
 
         # Broadcast
         rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_hex])
