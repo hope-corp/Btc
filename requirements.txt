@@ -1,3 +1,2 @@
-Flask
-bitcoinlib 
-requests
+flask
+pycoin  
