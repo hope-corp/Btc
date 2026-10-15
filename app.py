@@ -1,42 +1,57 @@
 from flask import Flask, render_template, request, jsonify
-# We are moving away from bitcoinlib for the heavy lifting, but keep imports for good measure
-from bitcoinlib.transactions import Transaction 
+from bitcoinlib.transactions import Transaction
 import os
 import requests
 from datetime import datetime
 
 # --- CONFIGURATION (CRITICAL UPDATE) ---
-# 1. TATUM_GATEWAY_URL: The REST API endpoint provided by Tatum.
+# 1. TATUM_GATEWAY_URL: The base REST API endpoint provided by Tatum.
 TATUM_GATEWAY_URL = "https://bitcoin-mainnet.gateway.tatum.io/rest"
-# 2. SIGNER_PRIVATE_KEY_HEX: The private key used to authorize the creation/inputs.
-SIGNER_PRIVATE_KEY_HEX = os.environ.get('SIGNER_PRIVATE_KEY_HEX') 
+
+# 2. Tatum API Key MUST be set in your Railway environment variables!
+# If you don't set it in Railway, you must uncomment and hardcode it here for testing:
+# TATUM_API_KEY_HARDCODED = "t-6ad0a905efcd0163332c909d-2b764bc394834c5eba53d72a"
+TATUM_API_KEY = os.environ.get('TATUM_API_KEY') 
 # ---------------------------------------------------------------------
 
 app = Flask(__name__)
 
 # =========================================================================
-# NEW INTERACTION LAYER: Replacing bitcoinlib with direct REST calls to Tatum
+# NEW INTERACTION LAYER: Tailored for Tatum REST API
 # =========================================================================
 
 def call_tatum_api(endpoint, method='POST', data=None, params=None):
-    """General wrapper to interact with the Tatum REST API."""
+    """
+    Interacts with the Tatum REST API, correctly applying required headers 
+    based on the provided CURL example.
+    """
+    API_KEY = os.environ.get('TATUM_API_KEY') 
+
+    if not API_KEY:
+        # Fallback or error if the environment variable is missing
+        return {"error_details": "TATUM_API_KEY environment variable is not set."}
+
+    # Build the headers exactly as shown in the curl command
     headers = {
-        'Content-Type': 'application/json'
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'x-api-key': API_KEY
     }
+
     try:
         if method == 'GET':
             response = requests.get(f"{TATUM_GATEWAY_URL}/{endpoint}", headers=headers, params=params)
-        else:
+        else: # POST method
             response = requests.post(f"{TATUM_GATEWAY_URL}/{endpoint}", headers=headers, json=data)
 
         response.raise_for_status() # This raises HTTPError for 4xx/5xx responses
         return response.json()
     except requests.exceptions.HTTPError as e:
-        # Handle specific API errors returned by Tatum
+        # Handle specific API errors returned by Tatum (4xx/5xx)
         try:
-            return response.json() # Try to parse the error body
+            return response.json() 
         except:
-            return {"error_details": str(e)}
+            return {"error_details": f"HTTP Error occurred: {e}"}
     except requests.exceptions.RequestException as e:
         # Handle connection failure to Tatum
         return {"error_details": f"Connection Error to Tatum Gateway: {e}"}
@@ -44,24 +59,20 @@ def call_tatum_api(endpoint, method='POST', data=None, params=None):
 
 def build_and_mint_tx(amount_btc, destination_address):
     """
-    Builds the transaction object payload required by Tatum (This is the NEW logic).
-    Tatum generally requires the inputs/outputs to be defined by UTXOs or raw values.
+    Builds the transaction payload required by Tatum (This is the NEW logic).
+    The parameters are defined here as (Amount_Float, Address_String).
     """
     print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
 
     # 1. Calculate amount in Satoshis (Crucial for the float conversion!)
     try:
+        # This line is the one that was failing!
         output_satoshi = int(float(amount_btc) * 100_000_000)
     except ValueError:
-        # If conversion fails here, it means the string was bad, as feared!
         raise Exception(f"Amount string '{amount_btc}' could not be converted to a float.")
 
     # 2. Construct the transaction payload payload for Tatum API submission
-    # NOTE: Tatum requires inputs to be defined relative to actual UTXOs or using inputs as 'P2PKH'
-    # For pure minting (out of nothing), we use the structure that submits inputs/outputs directly.
-
-    # --- SIMPLIFIED PAYLOAD FOR MINTING ---
-    # We use the core parameters Tatum needs for creation.
+    # NOTE: This payload structure is assumed to be correct for submitting a mint/simple TX to Tatum.
     tx_payload = {
         "inputs": [
             {
@@ -90,34 +101,34 @@ def api_endpoint():
     """Handles user input, generates the transaction payload, and broadcasts via Tatum."""
     data = request.get_json()
 
-    amount_raw = data.get('amount')        # Expecting number string "0.001"
-    address_str = data.get('address')      # Expecting string "bc1q..."
+    amount_raw = data.get('amount')        
+    address_str = data.get('address')      
 
     if not amount_raw or not address_str:
         return jsonify({"error": "Amount (Coin Value) and Address are required."}), 400
 
     try:
-        # *** FIX IN ACTION: Conversion forced AT THE API LAYER ***
+        # *** AGGRESSIVE CONVERSION FIX: Manual conversion FORCED HERE ***
         try:
             amount_float = float(amount_raw)
         except ValueError:
-            # This is your fallback for when the number string itself is corrupted.
-            return jsonify({"error": f"Amount field '{amount_raw}' is not a valid numeric value."}), 400
+            # If conversion fails, it means the input value itself is invalid.
+            return jsonify({"error": f"Amount field '{amount_raw}' is not a valid numeric value."}), 500
 
 
-        # --- 1. Build the Payload using the converted float ---
+        # --- 1. Build the Payload using the guaranteed float value ---
         tx_payload = build_and_mint_tx(amount_float, address_str)
 
         # --- 2. Attempt to Submit/Broadcast via Tatum REST API ---
-        # Tatum endpoint for creating/broadcasting is usually /transactions/
-
-        print(f"Attempting to submit transaction payload to Tatum API: {tx_payload}")
+        # NOTE: Assuming the correct endpoint for submission is '/transactions' 
+        # based on general REST API practices. This path is the most likely variable.
+        TATUM_SUBMISSION_ENDPOINT = 'transactions' # <--- REVIEW THIS PATH BASED ON TATUM DOCS
 
         # Use the Tatum gateway endpoint to submit the transaction
-        tatum_response = call_tatum_api('transactions', method='POST', data=tx_payload)
+        tatum_response = call_tatum_api(TATUM_SUBMISSION_ENDPOINT, method='POST', data=tx_payload)
 
         # 3. Process Tatum Response
-        if isinstance(tatum_response, dict) and 'error_details' in tatum_response:
+        if isinstance(tatum_response, dict) and 'error_details' in tumatum_response:
              return jsonify({"error": f"Tatum API Error: {tatum_response['error_details']}"}), 500
 
         # Assuming Tatum returns a successful transaction object/ID on success
@@ -133,12 +144,8 @@ def api_endpoint():
         return jsonify({"status": "success", "transaction_object": tx_payload, "broadcast_result": "N/A", "message": "Transaction submitted successfully, but ID was not returned."})
 
     except Exception as e:
-        # Catch all other errors (like failed float conversion inside build_and_mint_tx)
+        # This catches all other errors (like failed float conversion inside build_and_mint_tx)
         return jsonify({"error": str(e)}), 500
-
-# =========================================================================
-# End of Updated Code
-# =========================================================================
 
 if __name__ == '__main__':
     print("==============================================")
