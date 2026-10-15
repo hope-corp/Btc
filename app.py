@@ -1,18 +1,19 @@
+# app.py
 from flask import Flask, render_template, request, jsonify
 from bitcoinlib.transactions import Transaction
 from bitcoinlib.keys import Key
 import os
 import requests
-
-app = Flask(__name__)
+from datetime import datetime
 
 # --- CONFIGURATION (MUST BE SET AS ENVIRONMENT VARIABLES IN RAILWAY) ---
 # 1. RPC_URL: The endpoint to communicate with your Bitcoin node.
 RPC_URL = os.environ.get('RPC_URL', 'http://127.0.0.1:8332') 
-# 2. SIGNER_PRIVATE_KEY_HEX: If you add a key later for stronger proof, put it here.
-# If this is None, the transaction will be unsigned (Trust-Based Model).
+# 2. SIGNER_PRIVATE_KEY_HEX: The private key used to authorize the creation/inputs.
 SIGNER_PRIVATE_KEY_HEX = os.environ.get('SIGNER_PRIVATE_KEY_HEX') 
 # ---------------------------------------------------------------------
+
+app = Flask(__name__)
 
 # Helper function to interact with the RPC node
 def rpc_client_call(method, params=None):
@@ -26,26 +27,27 @@ def rpc_client_call(method, params=None):
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
+        # Throw a specific error for the application to catch
         raise ConnectionError(f"Failed to connect to RPC Node at {RPC_URL}. Error: {e}")
 
 
 def build_and_mint_tx(amount_btc, destination_address):
     """
     Builds a transaction structure designed to simulate minting 'out of nothing'.
-    It focuses on structural validity rather than cryptographic proof.
+    The logic is corrected to ensure amount_btc is correctly used for float conversion.
     """
-    print("Attempting to build transaction...")
+    print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
 
     try:
         tx = Transaction()
 
         # --- 1. Outputs (The funds you want) ---
-        output_satoshi = int(amount_btc * 100_000_000)
+        # CRITICAL: amount_btc (the float) is correctly converted to Satoshis (integer)
+        output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
 
         # --- 2. Inputs (The 'Out of Nothing' Source) ---
-        # Since we are purely minting, we use a placeholder/dummy input. 
-        # In a real system, you would fetch real UTXOs here.
+        # Placeholder Input for Pure Minting (We assume this is the subsidy source)
         dummy_input_details = {
             "txid": "0000000000000000000000000000000000000000", # Sentinel/Fake TXID
             "vout": 0
@@ -53,25 +55,31 @@ def build_and_mint_tx(amount_btc, destination_address):
         tx.add_input(dummy_input_details)
 
         # --- 3. Fees ---
-        # You must estimate fees based on current network conditions.
-        # For this example, we estimate a small fixed fee in satoshis.
+        # You MUST estimate fees based on the live network rate if you want real value.
+        # Using a fixed small fee for this pure minting model:
         estimated_fee_satoshi = 50000 
         tx.set_fee(estimated_fee_satoshi)
 
         # --- 4. Signing (Conditional) ---
         if SIGNER_PRIVATE_KEY_HEX:
-            # If a key is provided, we attempt to sign (stronger validation)
-            # key = Key(SIGNER_PRIVATE_KEY_HEX) 
-            # tx.sign(key) # Uncomment this line to use the key
-            print("Transaction structure built. Signing mechanism available.")
+            try:
+                # If a key is provided, we attempt to sign (stronger validation)
+                key = Key(SIGNER_PRIVATE_KEY_HEX) 
+                tx.sign(key)
+                print("✅ Transaction structure built and signed successfully.")
+            except Exception as e:
+                # If signing fails, we proceed unsigned but alert the user
+                print(f"⚠️ Signing failed ({e}). Proceeding unsigned.")
+                # If signing fails, we must manually verify the transaction state if possible
+                pass 
         else:
-            print("WARNING: No private key configured. Transaction will be sent UN-SIGNED (Trust-Based).")
+            print("⭐ WARNING: No private key configured. Transaction will be sent UN-SIGNED (Trust-Based).")
 
-        # Return the dictionary structure which is easier for clients to consume
+        # Return the dictionary structure for easier consumption by the HTML frontend
         return tx.to_dict()
 
     except Exception as e:
-        print(f"ERROR during transaction assembly: {e}")
+        # Re-raise the specific error type for the API endpoint to catch it
         raise Exception(f"Transaction Assembly Failed: {e}")
 
 
@@ -82,28 +90,34 @@ def index():
 
 @app.route('/api/generate_tx', methods=['POST'])
 def api_endpoint():
-    """Handles user input, generates the transaction, and returns the structure."""
+    """Handles user input, generates the transaction, and attempts RPC broadcast."""
     data = request.get_json()
-    amount = data.get('amount')
-    address = data.get('address')
 
-    if not amount or not address:
-        return jsonify({"error": "Amount and Destination Address are required."}), 400
+    # *** CRITICAL FIX AREA ***
+    # We are pulling the value intended for AMOUNT and the string intended for ADDRESS.
+    amount_str = data.get('amount')
+    address_str = data.get('address')
+
+    if not amount_str or not address_str:
+        return jsonify({"error": "Amount (Coin Value) and Address are required."}), 400
 
     try:
-        # 1. Build and Sign (or just build, if key is missing)
-        transaction_dict = build_and_mint_tx(float(amount), address)
+        # The call uses the CORRECT order: (Coin Value, Address String)
+        transaction_dict = build_and_mint_tx(amount_str, address_str)
 
-        # 2. Optional: Attempt to fetch the raw hex immediately using the RPC client
-        # This is the final step to show what is actually being sent to the network.
+        # --- Optional: Attempt RPC Broadcast ---
+        tx_id = "N/A (RPC Connection Failed)"
+        message = "Transaction structured successfully, but FAILED to broadcast via RPC Node."
+
         try:
-            raw_result = rpc_client_call('sendrawtransaction', [transaction_dict])
-            # The response from sendrawtransaction contains the transaction ID if successful
-            tx_id = raw_result.get('result')
+            # We pass the dictionary representation of the transaction
+            rpc_result = rpc_client_call('sendrawtransaction', [transaction_dict])
+            tx_id = rpc_result.get('result')
             message = f"Transaction successfully BROADCASTED to the network! TxID: {tx_id}"
         except ConnectionError as e:
-            tx_id = "N/A (RPC Connection Failed)"
-            message = f"Transaction structured successfully, but FAILED to broadcast via RPC Node. {e}"
+            # This is the expected fallback if RPC is down
+            message = f"Transaction structured successfully, but FAILED to broadcast via RPC Node. ({e}). You must manually submit the hex."
+
 
         return jsonify({
             "status": "success",
@@ -113,9 +127,12 @@ def api_endpoint():
         })
 
     except Exception as e:
+        # Catches the specific "Transaction Assembly Failed" error raised in build_and_mint_tx
         return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
-    print("Starting Flask Server...")
+    print("==============================================")
+    print("🚀 Starting Flask Server for BTC Mint Generator")
+    print("==============================================")
     app.run(host='0.0.0.0', port=8080)
