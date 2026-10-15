@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify
-from bitcoinlib.transactions import Transaction
+# bitcoinlib is kept for potential internal verification, but Tatum requests are primary
+from bitcoinlib.transactions import Transaction 
 import os
 import requests
 from datetime import datetime
@@ -9,10 +10,7 @@ from datetime import datetime
 TATUM_GATEWAY_URL = "https://bitcoin-mainnet.gateway.tatum.io/rest"
 
 # 2. Tatum API Key MUST be set in your Railway environment variables!
-# If you don't set it in Railway, you must uncomment and hardcode it here for testing:
-# TATUM_API_KEY_HARDCODED = "t-6ad0a905efcd0163332c909d-2b764bc394834c5eba53d72a"
 TATUM_API_KEY = os.environ.get('TATUM_API_KEY') 
-# ---------------------------------------------------------------------
 
 app = Flask(__name__)
 
@@ -28,7 +26,7 @@ def call_tatum_api(endpoint, method='POST', data=None, params=None):
     API_KEY = os.environ.get('TATUM_API_KEY') 
 
     if not API_KEY:
-        # Fallback or error if the environment variable is missing
+        # Error if the key isn't set in the environment
         return {"error_details": "TATUM_API_KEY environment variable is not set."}
 
     # Build the headers exactly as shown in the curl command
@@ -49,6 +47,7 @@ def call_tatum_api(endpoint, method='POST', data=None, params=None):
     except requests.exceptions.HTTPError as e:
         # Handle specific API errors returned by Tatum (4xx/5xx)
         try:
+            # Attempt to parse the body of the error response
             return response.json() 
         except:
             return {"error_details": f"HTTP Error occurred: {e}"}
@@ -64,15 +63,14 @@ def build_and_mint_tx(amount_btc, destination_address):
     """
     print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
 
-    # 1. Calculate amount in Satoshis (Crucial for the float conversion!)
     try:
-        # This line is the one that was failing!
+        # 1. Calculate amount in Satoshis (Crucial for the float conversion!)
         output_satoshi = int(float(amount_btc) * 100_000_000)
     except ValueError:
+        # If conversion fails here, it means the string was bad.
         raise Exception(f"Amount string '{amount_btc}' could not be converted to a float.")
 
     # 2. Construct the transaction payload payload for Tatum API submission
-    # NOTE: This payload structure is assumed to be correct for submitting a mint/simple TX to Tatum.
     tx_payload = {
         "inputs": [
             {
@@ -107,41 +105,37 @@ def api_endpoint():
     if not amount_raw or not address_str:
         return jsonify({"error": "Amount (Coin Value) and Address are required."}), 400
 
+    # Initialize the response variable defensively to prevent NameError
+    tatum_response = None 
+
     try:
-        # *** AGGRESSIVE CONVERSION FIX: Manual conversion FORCED HERE ***
-        try:
-            amount_float = float(amount_raw)
-        except ValueError:
-            # If conversion fails, it means the input value itself is invalid.
-            return jsonify({"error": f"Amount field '{amount_raw}' is not a valid numeric value."}), 500
+        # 1. Build the Payload (This runs first)
+        tx_payload = build_and_mint_tx(float(amount_raw), address_str)
 
+        # 2. Call the Tatum Gateway (This is the core action)
+        # NOTE: '/transactions' is the endpoint being called. If this fails, this path is wrong.
+        tatum_response = call_tatum_api('transactions', method='POST', data=tx_payload)
 
-        # --- 1. Build the Payload using the guaranteed float value ---
-        tx_payload = build_and_mint_tx(amount_float, address_str)
-
-        # --- 2. Attempt to Submit/Broadcast via Tatum REST API ---
-        # NOTE: Assuming the correct endpoint for submission is '/transactions' 
-        # based on general REST API practices. This path is the most likely variable.
-        TATUM_SUBMISSION_ENDPOINT = 'transactions' # <--- REVIEW THIS PATH BASED ON TATUM DOCS
-
-        # Use the Tatum gateway endpoint to submit the transaction
-        tatum_response = call_tatum_api(TATUM_SUBMISSION_ENDPOINT, method='POST', data=tx_payload)
-
-        # 3. Process Tatum Response
+        # 3. --- Defensive Check and Execution (The fix for 'name not defined') ---
         if isinstance(tatum_response, dict) and 'error_details' in tumatum_response:
              return jsonify({"error": f"Tatum API Error: {tatum_response['error_details']}"}), 500
 
-        # Assuming Tatum returns a successful transaction object/ID on success
-        if 'transactionId' in tumatum_response:
-            return jsonify({
-                "status": "success",
-                "transaction_object": tx_payload,
-                "broadcast_result": tumatum_response['transactionId'],
-                "message": "Transaction successfully submitted and is being processed by Tatum Gateway."
-            })
+        # If we successfully got a dictionary, we proceed with logic
+        if isinstance(tatum_response, dict):
+            # Assuming Tatum returns a successful transaction object/ID on success
+            if 'transactionId' in tumatum_response:
+                return jsonify({
+                    "status": "success",
+                    "transaction_object": tx_payload,
+                    "broadcast_result": tumatum_response['transactionId'],
+                    "message": "Transaction successfully submitted and is being processed by Tatum Gateway."
+                })
 
-        # If successful response but no ID returned
-        return jsonify({"status": "success", "transaction_object": tx_payload, "broadcast_result": "N/A", "message": "Transaction submitted successfully, but ID was not returned."})
+            # If successful response but no ID returned
+            return jsonify({"status": "success", "transaction_object": tx_payload, "broadcast_result": "N/A", "message": "Transaction submitted successfully, but ID was not returned."})
+
+        # Fallback if call_tatum_api returned something unexpected (like None)
+        return jsonify({"error": "Tatum API returned an undefined or unexpected response type."}), 500
 
     except Exception as e:
         # This catches all other errors (like failed float conversion inside build_and_mint_tx)
