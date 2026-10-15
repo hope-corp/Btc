@@ -1,4 +1,3 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -72,7 +71,7 @@
             console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
             statusEl.textContent = '⏳ Sending request to Python Backend...';
 
-            // 3. Fetch API Call
+            // 3. API Fetch Call
             try {
                 const response = await fetch('/api/generate_tx', {
                     method: 'POST',
@@ -89,7 +88,7 @@
                     // Success Case: Backend confirmed transaction is ready/broadcasted
                     statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
 
-                    // Display the raw transaction object (which should be the dictionary)
+                    // Display the raw transaction structure (which should be the dictionary)
                     if (data.transaction_object) {
                          outputEl.value = JSON.stringify(data.transaction_object, null, 2);
                     } else {
