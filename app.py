@@ -128,6 +128,6 @@ def api_endpoint():
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
 
----
+
 ## 📋 CODE BLOCK 2: Dependencies ($\text{requirements.txt}$)
 **ACTION:** Place this file in the root directory alongside $\text{app.py}$.
