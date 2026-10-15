@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, jsonify
 from bitcoinlib.transactions import Transaction 
-import os
 import requests
 import json
 from datetime import datetime
@@ -42,41 +41,35 @@ def call_rpc_node(method, params=None):
     except requests.exceptions.RequestException as e:
         # Connection/HTTP failure
         return {"error_details": f"CONNECTION FAILURE: {e}"}
-
-TRANSACTION BUILDING AND SIGNING LOGIC (THE FIX)
-def build_and_mint_tx(amount_btc, destination_address, input_address, input_private_key):
+=========================================================================
+TRANSACTION BUILDER (SIMPLIFIED): 
+NOTE: We skip complex local signing to simplify the submission payload, 
+relying more heavily on the external RPC node.
+def create_submission_payload(amount_btc, destination_address, input_address, input_private_key):
     """
-    Constructs the TX object, adds outputs, and signs it locally.
-    This solves the "TX decode failed" error by providing a cryptographically valid object.
+    Creates a dictionary payload optimized for direct RPC submission.
     """
     try:
-        # 1. Convert Amount to Satoshis
-        output_satoshi = int(float(amount_btc) * 100_000_000)
-
-        # 2. Initialize Transaction Object
+        # 1. Construct the TX object using bitcoinlib
         tx = Transaction()
 
-        # 3. Define Outputs (Where the funds go)
+        # 2. Add Outputs
+        output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
 
-        # 4. Define Inputs (Where the funds come from - THE FIX)
+        # 3. Add Inputs (Crucial for tracing/validation)
         tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
-
-        # 5. Calculate and Add Fees
         tx.add_fee() 
 
-        # 6. Sign the Transaction (Crucial step for validity)
+        # 4. Sign the Transaction locally (Best Practice)
         tx.sign() 
 
-        # 7. Serialize to Raw Hex (What the RPC node demands for sendrawtransaction)
+        # 5. Serialize to Raw Hex
         raw_tx_hex = tx.serialize()
 
-        return {
-            "descriptive_payload": tx.to_dict(), 
-            "raw_hex": raw_tx_hex
-        }
+        return raw_tx_hex
     except Exception as e:
-        raise Exception(f"TX Construction/Signing Failure: {str(e)}")
+        raise Exception(f"Simplified Payload Failure: {str(e)}")
 =========================================================================
 API Endpoints
 =========================================================================
@@ -98,11 +91,11 @@ def api_endpoint():
         return jsonify({"error": "Missing Fields Error: Amount, Destination Address, Input Address, AND Private Key are required."}), 400
 
     try:
-        # 1. Build and Sign Locally (The Core Logic)
-        tx_data = build_and_mint_tx(float(amount_raw), address_str, input_address, private_key)
+        # 1. Build Payload (Using the simplified function)
+        raw_tx_hex = create_submission_payload(float(amount_raw), address_str, input_address, private_key)
 
         # 2. Call the RPC Node with the raw hex string
-        rpc_result = call_rpc_node('sendrawtransaction', params=[tx_data['raw_hex']])
+        rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_hex])
 
         # 3. Outcome Check
         if isinstance(rpc_result, dict) and 'error_details' in rpc_result:
@@ -114,7 +107,6 @@ def api_endpoint():
         # Success path
         return jsonify({
             "status": "success",
-            "transaction_object": tx_data['descriptive_payload'],
             "broadcast_result": rpc_result, 
             "message": "Transaction successfully submitted to the RPC node. Awaiting confirmation on block explorer."
         })
