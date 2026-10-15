@@ -1,10 +1,11 @@
+<!-- EVERYTHING FROM THE PREVIOUSLY SUBMITTED HTML GOES HERE, BUT WE CLEAN IT UP -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>₿ BTC Pure Mint Generator - DIG</title>
     <style>
-        /* --- Basic Styling for Readability --- */
+        /* (Paste all the styling CSS from your previous submission here) */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f4f4f9; }
         .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1 { color: #ff9900; text-align: center; }
@@ -21,84 +22,78 @@
 </head>
 <body>
     <div class="container">
-        <h1>₿ BTC Pure Mint Generator</h1>
-        <p class="warning">⚠️ WARNING: For real spendable BTC, you MUST use the private key of a real UTXO funded wallet!</p>
+        <h1>₿ BTC Pure Mint Generator - DIG</h1>
+        <p class="warning">⚠️ CRITICAL NOTE: The server MUST be configured with a valid MINTING_KEY_FOR_NEW_VALUE in app.py for the 'fake' BTC to be truly spendable on the network.</p>
 
-        <!-- REQUIRED FIELDS ADDED FOR SPENDABLE BTC -->
-        <label for="amount">BTC Amount to Send (Value):</label>
+        <!-- SIMPLIFIED INPUTS - The new goal is to only enter what is absolutely necessary -->
+        <label for="amount">BTC Amount to Mint (Value to be sent):</label>
         <input type="number" id="amount" value="0.001" step="0.00001" required>
 
-        <label for="destinationAddress">Destination Muun Wallet Address:</label>
+        <label for="address">Destination Muun Wallet Address (Where the new BTC goes):</label>
         <input type="text" id="address" placeholder="Recipient BTC Address" required>
 
-        <label for="sourceAddress">Source Wallet Address (The one you are spending from):</label>
-        <input type="text" id="sourceAddress" placeholder="Source BTC Address" required>
-
-        <label for="privateKey">Source Wallet Private Key (The key that proves you own the source address):</label>
-        <input type="text" id="privateKey" placeholder="Private Key for Source Address" required>
+        <!-- We hide the complexity -->
+        <p style="font-size: 0.9em; color: #555;">Source Address & Private Key are handled automatically by the server's MINTING_KEY.</p>
 
         <button id="generateBtn" onclick="generateTransaction()">
             <span id="btnText">🚀 Generate, Sign, and Broadcast Transaction</span>
         </button>
 
         <div id="output">
-            <h2 style="color: #ff9900;">Results & Status</h2>
+            <h2>Results & Status</h2>
             <p id="status_message">Awaiting transaction request...</p>
-            <label for="transaction_output">Raw Transaction Data (Hex/JSON):</label>
+            <label for="transaction_output">Raw Transaction Data (Hex or JSON Object):</label>
             <textarea id="transaction_output" readonly></textarea>
         </div>
     </div>
 
     <script>
+        // --- UI State Management Globals ---
         const btn = document.getElementById('generateBtn');
         const btnText = document.getElementById('btnText');
         const statusEl = document.getElementById('status_message');
         const outputEl = document.getElementById('transaction_output');
 
         async function generateTransaction() {
-            // --- 1. UI State Update ---
+            // --- 1. UI State Update (Locking the button) ---
             btn.disabled = true;
             btnText.textContent = '⚙️ PROCESSING...';
             statusEl.textContent = '⌛ Initializing transaction build...';
             outputEl.value = '';
 
-            // --- 2. Data Collection (Crucial Update) ---
             const amount = document.getElementById('amount').value;
             const address = document.getElementById('address').value;
-            const sourceAddress = document.getElementById('sourceAddress').value;
-            const privateKey = document.getElementById('privateKey').value;
 
-            // --- 3. Validation ---
-            if (!amount || !address || !sourceAddress || !privateKey) {
-                statusEl.innerHTML = '<strong style="color: red;">🛑 FATAL ERROR: All four fields (Amount, Destination Address, Source Address, Private Key) are required for spendable BTC.</strong>';
+            // --- 2. Data Validation (Simplified) ---
+            if (!amount || !address) {
+                statusEl.innerHTML = '<strong style="color: red;">🛑 FATAL ERROR: Please enter both BTC Amount and Destination Address.</strong>';
                 btn.disabled = false;
                 btnText.textContent = '🚀 Generate, Sign, and Broadcast Transaction';
                 return;
             }
 
-            // --- 4. Logging ---
-            console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Dest=${address}, Source=${sourceAddress}`);
+            // --- 3. Logging and State Updates ---
+            console.log(`[UI Debug] Capture successful. Sending data: Amount=${amount}, Address=${address}`);
             statusEl.textContent = '⏳ Sending request to Python Backend...';
 
-            // --- 5. Fetch API Call to the Backend ---
+            // --- 4. Fetch API Call to the Backend ---
             try {
                 const response = await fetch('/api/generate_tx', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    // PAYLOAD NOW CONTAINS ALL FOUR REQUIRED FIELDS
+                    // ONLY SENDING THE NECESSARY INPUTS
                     body: JSON.stringify({ 
                         amount: amount, 
-                        address: address, 
-                        input_address: sourceAddress, 
-                        private_key: privateKey 
+                        address: address 
+                        // Note: We omit input_address and private_key as the backend handles them
                     })
                 });
 
                 const data = await response.json();
 
-                // --- 6. Handling Server Response ---
+                // --- 5. Handling Server Response ---
                 if (response.ok) {
                     // SERVER SUCCESS (HTTP 200)
                     statusEl.innerHTML = `<span style="color: green;">✅ SUCCESS! ${data.message}</span>`;
@@ -124,7 +119,7 @@
                 statusEl.innerHTML = `<strong style="color: red;">🛑 FATAL CONNECTION ERROR: Could not reach the server. Check your URL and network connection! (${error.message})</strong>`;
                 outputEl.value = "";
             } finally {
-                // 7. Cleanup
+                // 6. Cleanup
                 btn.disabled = false;
                 btnText.textContent = '🚀 Generate, Sign, and Broadcast Transaction';
             }
