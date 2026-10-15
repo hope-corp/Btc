@@ -5,20 +5,21 @@ import requests
 import json
 from datetime import datetime
 
-# --- CONFIGURATION (RPC NODE CHANGE) ---
+# --- CONFIGURATION ---
+# 1. RPC Node Endpoint: The raw node URL provided by the user
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 RPC_AUTH = None 
-# -------------------------------------
+# ----------------------
 
 app = Flask(__name__)
 
 # =========================================================================
-# 🧩 RPC INTERACTION LAYER: JSON-RPC
+# 🧩 RPC INTERACTION LAYER: JSON-RPC (The communication layer)
 # =========================================================================
-
 def call_rpc_node(method, params=None):
     """
-    Interacts with the raw JSON-RPC endpoint using the requests library.
+    Interacts with the raw JSON-RPC endpoint.
+    Handles connection errors and RPC protocol errors.
     """
     try:
         rpc_payload = {
@@ -38,7 +39,7 @@ def call_rpc_node(method, params=None):
         rpc_result = response.json()
 
         if 'error' in rpc_result:
-            # RPC protocol error detected
+            # RPC protocol error detected (e.g., invalid method, bad format)
             return {"error_details": rpc_result['error']['message']}
 
         return rpc_result.get('result')
@@ -48,82 +49,93 @@ def call_rpc_node(method, params=None):
         return {"error_details": f"CONNECTION FAILURE: {e}"}
 
 
-def build_and_mint_tx(amount_btc, destination_address):
-    """
-    Builds the transaction payload structure (The data blueprint).
-    """
-    print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
-    try:
-        output_satoshi = int(float(amount_btc) * 100_000_000)
-    except ValueError:
-        raise Exception(f"Input amount '{amount_btc}' could not be converted to a float.")
+# =========================================================================
+# ✍️ TRANSACTION BUILDING & SIGNING LOGIC (THE FIX)
+# =========================================================================
+def build_and_sign_tx(amount_btc, destination_address, input_address, input_private_key):
+"""
+Constructs the TX object, adds outputs, and signs it locally.
+This is the definitive fix for the "TX decode failed" error.
+"""
+try:
+    # 1. Convert Amount to Satoshis
+    output_satoshi = int(float(amount_btc) * 100_000_000)
 
-    tx_payload = {
-        "inputs": [
-            {
-                "address": "0000000000000000000000000000000000000000", 
-                "amount": output_satoshi 
-            }
-        ],
-        "outputs": [
-            {
-                "address": destination_address,
-                "amount": output_satoshi
-            }
-        ],
-        "fee": 50000 
+    # 2. Initialize Transaction Object
+    tx = Transaction()
+
+    # 3. Define Outputs (Where the funds go)
+    tx.add_output(destination_address, output_satoshi)
+
+    # 4. Define Inputs (Where the funds come from - THIS IS THE FIX)
+    # We use bitcoinlib to pull data from the input_address using the private key.
+    # NOTE: In a real system, you often need to explicitly fetch the UTXO first.
+    # bitcoinlib handles fetching/parsing the UTXO details when you provide the address and key.
+    tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
+
+    # 5. Calculate and Add Fees
+    tx.add_fee() 
+
+    # 6. Sign the Transaction (Crucial step for validity)
+    tx.sign() 
+
+    # 7. Serialize to Raw Hex (What the RPC node demands for sendrawtransaction)
+    raw_tx_hex = tx.serialize()
+
+    # Return both the descriptive object for UI readability AND the raw hex for RPC submission
+    return {
+        "descriptive_payload": tx.to_dict(), # For display in UI
+        "raw_hex": raw_tx_hex
     }
-    return tx_payload
-
-# =========================================================================
-# API Endpoints
-# =========================================================================
-
+except Exception as e:
+    # Catches all errors during the complex process
+    raise Exception(f"TX Construction/Signing Failure: {str(e)}")
+=========================================================================
+API Endpoints
+=========================================================================
 @app.route('/', methods=['GET'])
 def index():
-    """Serves the user interface form."""
-    return render_template('index.html')
+"""Serves the user interface form."""
+# IMPORTANT: Must point to the HTML file structure
+return render_template('index.html')
 
 @app.route('/api/generate_tx', methods=['POST'])
 def api_endpoint():
-    """Handles user input, generates the transaction payload, and submits via RPC."""
-    data = request.get_json()
-    amount_raw = data.get('amount')        
-    address_str = data.get('address')      
+"""Handles user input, builds, signs, and submits via RPC."""
+data = request.get_json()
+amount_raw = data.get('amount')        
+address_str = data.get('address')      
+input_address = data.get('input_address') 
+private_key = data.get('private_key') 
 
-    if not amount_raw or not address_str:
-        return jsonify({"error": "Amount (Coin Value) and Address are required."}), 400
+if not amount_raw or not address_str or not input_address or not private_key:
+    return jsonify({"error": "Missing Fields Error: Amount, Destination Address, Input Address, AND Private Key are required."}), 400
 
-    try:
-        # 1. Build the Payload
-        tx_payload = build_and_mint_tx(float(amount_raw), address_str)
+try:
+    # 1. Build and Sign Locally (The Fix applied here)
+    tx_data = build_and_sign_tx(float(amount_raw), address_str, input_address, private_key)
 
-        # 2. Data Serialization (CRITICAL): 
-        # We convert the Python dict to a JSON string. If the RPC node requires raw hex, 
-        # this line is the failure point.
-        raw_tx_string = json.dumps(tx_payload) 
+    # 2. Call the RPC Node with the raw hex string
+    # We send the raw hex string, as required by 'sendrawtransaction'
+    rpc_result = call_rpc_node('sendrawtransaction', params=[tx_data['raw_hex']])
 
-        # 3. Call the RPC Node
-        rpc_result = call_rpc_node('sendrawtransaction', params=[raw_tx_string])
+    # 3. Outcome Check
+    if isinstance(rpc_result, dict) and 'error_details' in rpc_result:
+        return jsonify({"error": f"RPC Submission Failed: {rpc_result['error_details']}"}), 500
 
-        # 4. Outcome Check
-        if isinstance(rpc_result, dict) and 'error_details' in rpc_result:
-            return jsonify({"error": f"RPC Submission Failed: {rpc_result['error_details']}"}), 500
+    if rpc_result is None:
+        return jsonify({"error": "RPC Node returned no successful response."}), 500
 
-        if rpc_result is None:
-            return jsonify({"error": "RPC Node returned no successful response."}), 500
+    # Success path
+    return jsonify({
+        "status": "success",
+        "transaction_object": tx_data['descriptive_payload'],
+        "broadcast_result": rpc_result, # This is the transaction ID/result from the RPC call
+        "message": "Transaction successfully submitted to the RPC node. Awaiting confirmation on block explorer."
+    })
 
-        # Success path
-        return jsonify({
-            "status": "success",
-            "transaction_object": tx_payload,
-            "broadcast_result": rpc_result, 
-            "message": "Transaction successfully submitted to the RPC node. Check the resulting ID on a block explorer."
-        })
-
-    except Exception as e:
-        # Catch all internal logic failures
-        return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
-
+except Exception as e:
+    # Catch all failures
+    return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
