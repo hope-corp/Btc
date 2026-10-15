@@ -7,7 +7,6 @@ from datetime import datetime
 # --- CONFIGURATION ---
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 RPC_AUTH = None 
-# ----------------------
 app = Flask(name)
 
 # ==========================================================================
@@ -42,31 +41,20 @@ def call_rpc_node(method, params=None):
         # Connection/HTTP failure
         return {"error_details": f"CONNECTION FAILURE: {e}"}
 =========================================================================
-TRANSACTION BUILDER (SIMPLIFIED): 
-NOTE: We skip complex local signing to simplify the submission payload, 
-relying more heavily on the external RPC node.
+TRANSACTION BUILDER (SIMPLIFIED):
 def create_submission_payload(amount_btc, destination_address, input_address, input_private_key):
     """
     Creates a dictionary payload optimized for direct RPC submission.
     """
     try:
-        # 1. Construct the TX object using bitcoinlib
         tx = Transaction()
 
-        # 2. Add Outputs
         output_satoshi = int(float(amount_btc) * 100_000_000)
         tx.add_output(destination_address, output_satoshi)
-
-        # 3. Add Inputs (Crucial for tracing/validation)
         tx.add_input(input_address, input_private_key, amount_satoshi=output_satoshi)
         tx.add_fee() 
-
-        # 4. Sign the Transaction locally (Best Practice)
         tx.sign() 
-
-        # 5. Serialize to Raw Hex
         raw_tx_hex = tx.serialize()
-
         return raw_tx_hex
     except Exception as e:
         raise Exception(f"Simplified Payload Failure: {str(e)}")
@@ -116,3 +104,6 @@ def api_endpoint():
         return jsonify({"error": f"System Initialization Failure: {str(e)}"}), 500
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
+
+## 📋 CODE BLOCK 2: Dependencies (requirements.txt)
+**(Action: Place this file in the root directory alongside app.py.)**
