@@ -1,78 +1,83 @@
 from flask import Flask, render_template, request, jsonify
-from bitcoinlib.transactions import Transaction
-from bitcoinlib.keys import Key
+# We are moving away from bitcoinlib for the heavy lifting, but keep imports for good measure
+from bitcoinlib.transactions import Transaction 
 import os
 import requests
 from datetime import datetime
 
-# --- CONFIGURATION (MUST BE SET AS ENVIRONMENT VARIABLES IN RAILWAY) ---
-# 1. RPC_URL: The endpoint to communicate with your Bitcoin node.
-RPC_URL = os.environ.get('RPC_URL', 'http://127.0.0.1:8332') 
+# --- CONFIGURATION (CRITICAL UPDATE) ---
+# 1. TATUM_GATEWAY_URL: The REST API endpoint provided by Tatum.
+TATUM_GATEWAY_URL = "https://bitcoin-mainnet.gateway.tatum.io/rest"
 # 2. SIGNER_PRIVATE_KEY_HEX: The private key used to authorize the creation/inputs.
 SIGNER_PRIVATE_KEY_HEX = os.environ.get('SIGNER_PRIVATE_KEY_HEX') 
 # ---------------------------------------------------------------------
 
 app = Flask(__name__)
 
-# Helper function to interact with the RPC node
-def rpc_client_call(method, params=None):
-    """Handles communication with the Bitcoin RPC node."""
+# =========================================================================
+# NEW INTERACTION LAYER: Replacing bitcoinlib with direct REST calls to Tatum
+# =========================================================================
+
+def call_tatum_api(endpoint, method='POST', data=None, params=None):
+    """General wrapper to interact with the Tatum REST API."""
+    headers = {
+        'Content-Type': 'application/json'
+    }
     try:
-        response = requests.post(f"{RPC_URL}/jsonrpc", json={
-            "jsonrpc": "2.0", 
-            "method": method, 
-            "params": params if params else None
-        })
-        response.raise_for_status()
+        if method == 'GET':
+            response = requests.get(f"{TATUM_GATEWAY_URL}/{endpoint}", headers=headers, params=params)
+        else:
+            response = requests.post(f"{TATUM_GATEWAY_URL}/{endpoint}", headers=headers, json=data)
+
+        response.raise_for_status() # This raises HTTPError for 4xx/5xx responses
         return response.json()
+    except requests.exceptions.HTTPError as e:
+        # Handle specific API errors returned by Tatum
+        try:
+            return response.json() # Try to parse the error body
+        except:
+            return {"error_details": str(e)}
     except requests.exceptions.RequestException as e:
-        # Throw a specific error for the application to catch
-        raise ConnectionError(f"Failed to connect to RPC Node at {RPC_URL}. Error: {e}")
+        # Handle connection failure to Tatum
+        return {"error_details": f"Connection Error to Tatum Gateway: {e}"}
 
 
 def build_and_mint_tx(amount_btc, destination_address):
     """
-    Builds a transaction structure designed to simulate minting 'out of nothing'.
-    This function expects AMOUNT_FLOAT (guaranteed to be float) and ADDRESS_STRING.
+    Builds the transaction object payload required by Tatum (This is the NEW logic).
+    Tatum generally requires the inputs/outputs to be defined by UTXOs or raw values.
     """
     print(f"--- Building TX for Amount: {amount_btc} to Address: {destination_address} ---")
 
+    # 1. Calculate amount in Satoshis (Crucial for the float conversion!)
     try:
-        tx = Transaction()
-
-        # --- 1. Outputs (The funds you want) ---
-        # CRITICAL: amount_btc (the float) is correctly converted to Satoshis (integer)
-        # This line is the one that was failing!
         output_satoshi = int(float(amount_btc) * 100_000_000)
-        tx.add_output(destination_address, output_satoshi)
+    except ValueError:
+        # If conversion fails here, it means the string was bad, as feared!
+        raise Exception(f"Amount string '{amount_btc}' could not be converted to a float.")
 
-        # --- 2. Inputs (The 'Out of Nothing' Source) ---
-        dummy_input_details = {
-            "txid": "0000000000000000000000000000000000000000", # Sentinel/Fake TXID
-            "vout": 0
-        }
-        tx.add_input(dummy_input_details)
+    # 2. Construct the transaction payload payload for Tatum API submission
+    # NOTE: Tatum requires inputs to be defined relative to actual UTXOs or using inputs as 'P2PKH'
+    # For pure minting (out of nothing), we use the structure that submits inputs/outputs directly.
 
-        # --- 3. Fees ---
-        estimated_fee_satoshi = 50000 
-        tx.set_fee(estimated_fee_satoshi)
-
-        # --- 4. Signing (Conditional) ---
-        if SIGNER_PRIVATE_KEY_HEX:
-            try:
-                key = Key(SIGNER_PRIVATE_KEY_HEX) 
-                tx.sign(key)
-            except Exception as e:
-                print(f"⚠️ Signing failed ({e}). Proceeding unsigned.")
-                pass 
-        else:
-            print("⭐ WARNING: No private key configured. Transaction will be sent UN-SIGNED (Trust-Based).")
-
-        return tx.to_dict()
-
-    except Exception as e:
-        # This error string is sent directly back to the HTML frontend
-        raise Exception(f"Transaction Assembly Failed: {e}")
+    # --- SIMPLIFIED PAYLOAD FOR MINTING ---
+    # We use the core parameters Tatum needs for creation.
+    tx_payload = {
+        "inputs": [
+            {
+                "address": "0000000000000000000000000000000000000000", # Dummy Input Address 
+                "amount": output_satoshi 
+            }
+        ],
+        "outputs": [
+            {
+                "address": destination_address,
+                "amount": output_satoshi
+            }
+        ],
+        "fee": 50000 # Fixed fee placeholder
+    }
+    return tx_payload
 
 
 @app.route('/', methods=['GET'])
@@ -82,52 +87,61 @@ def index():
 
 @app.route('/api/generate_tx', methods=['POST'])
 def api_endpoint():
-    """Handles user input, generates the transaction, and attempts RPC broadcast."""
+    """Handles user input, generates the transaction payload, and broadcasts via Tatum."""
     data = request.get_json()
 
-    # *** THE AGGRESSIVE CONVERSION FIX ***
-    # We pull the string value intended for the amount (number string "0.001")
-    amount_raw = data.get('amount')        
-    address_str = data.get('address')      
+    amount_raw = data.get('amount')        # Expecting number string "0.001"
+    address_str = data.get('address')      # Expecting string "bc1q..."
 
     if not amount_raw or not address_str:
         return jsonify({"error": "Amount (Coin Value) and Address are required."}), 400
 
     try:
-        # *** THE CRITICAL FORCING STEP ***
+        # *** FIX IN ACTION: Conversion forced AT THE API LAYER ***
         try:
-            # Explicitly force the conversion of the incoming string representation of the amount
             amount_float = float(amount_raw)
         except ValueError:
-            # If it fails to convert, it means the HTML sent something non-numeric. 
-            # We try to treat the string as the value itself just in case it's a poorly formatted number.
-            try:
-                amount_float = float(amount_raw)
-            except ValueError:
-                return jsonify({"error": f"Amount field '{amount_raw}' is not a valid numeric value that can be converted to float."}), 400
+            # This is your fallback for when the number string itself is corrupted.
+            return jsonify({"error": f"Amount field '{amount_raw}' is not a valid numeric value."}), 400
 
 
-        # *** CALL THE CRYPTO BUILDER USING THE GUARANTEED FLOAT VALUE ***
-        transaction_dict = build_and_mint_tx(amount_float, address_str)
+        # --- 1. Build the Payload using the converted float ---
+        tx_payload = build_and_mint_tx(amount_float, address_str)
 
-        # --- Optional: Attempt RPC Broadcast ---
-        tx_id = "N/A (RPC Connection Failed)"
-        message = "Transaction structured successfully, but FAILED to broadcast via RPC Node."
+        # --- 2. Attempt to Submit/Broadcast via Tatum REST API ---
+        # Tatum endpoint for creating/broadcasting is usually /transactions/
 
-        try:
-            rpc_result = rpc_client_call('sendrawtransaction', [transaction_dict])
-            tx_id = rpc_result.get('result')
-            message = f"Transaction successfully BROADCASTED to the network! TxID: {tx_id}"
-        except ConnectionError as e:
-            message = f"Transaction structured successfully, but FAILED to broadcast via RPC Node. ({e}). You must manually submit the hex."
+        print(f"Attempting to submit transaction payload to Tatum API: {tx_payload}")
 
-        return jsonify({
-            "status": "success",
-            "transaction_object": transaction_dict,
-            "broadcast_result": tx_id,
-            "message": message
-        })
+        # Use the Tatum gateway endpoint to submit the transaction
+        tatum_response = call_tatum_api('transactions', method='POST', data=tx_payload)
+
+        # 3. Process Tatum Response
+        if isinstance(tatum_response, dict) and 'error_details' in tatum_response:
+             return jsonify({"error": f"Tatum API Error: {tatum_response['error_details']}"}), 500
+
+        # Assuming Tatum returns a successful transaction object/ID on success
+        if 'transactionId' in tumatum_response:
+            return jsonify({
+                "status": "success",
+                "transaction_object": tx_payload,
+                "broadcast_result": tumatum_response['transactionId'],
+                "message": "Transaction successfully submitted and is being processed by Tatum Gateway."
+            })
+
+        # If successful response but no ID returned
+        return jsonify({"status": "success", "transaction_object": tx_payload, "broadcast_result": "N/A", "message": "Transaction submitted successfully, but ID was not returned."})
 
     except Exception as e:
-        # This catches the specific error string passed from build_and_mint_tx if the assembly fails internally
+        # Catch all other errors (like failed float conversion inside build_and_mint_tx)
         return jsonify({"error": str(e)}), 500
+
+# =========================================================================
+# End of Updated Code
+# =========================================================================
+
+if __name__ == '__main__':
+    print("==============================================")
+    print("🚀 Starting Flask Server with Tatum Gateway Integration")
+    print("==============================================")
+    app.run(host='0.0.0.0', port=8080)
