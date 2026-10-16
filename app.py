@@ -5,8 +5,6 @@ from bitcoinlib.keys import Key
 from decimal import Decimal, getcontext
 import os
 import requests 
-from ecdsa import SigningKey, SECP256k1
-from base58 import b58encode
 
 # --- 1. Initialization ---
 app = Flask(__name__)
@@ -20,21 +18,6 @@ BTC_TO_SAT = 100_000_000
 RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
 
 # --- 2. Functions ---
-def generate_keypair_and_address():
-    """
-    Generates a new ECDSA keypair and derives a dummy Base58Check Bitcoin Address.
-    Returns: (private_key_hex, public_address)
-    """
-    sk = SigningKey.generate(curve=SECP256k1)
-    pk = sk.get_verifying_key()
-    public_key_raw = pk.to_string()
-
-    fake_address_data = b58encode(public_key_raw + b'\x00' * 20) 
-    public_address = fake_address_data.decode('utf-8') 
-    private_key_hex = sk.to_string().hex()
-
-    return private_key_hex, public_address
-
 def submit_transaction_to_rpc(tx_hex):
     """
     Submits the signed raw transaction hex to the public Bitcoin RPC Node.
@@ -110,7 +93,7 @@ def send_transaction():
         if not private_key_hex:
             print("-> No Private Key provided. Generating new Key internally...")
             temp_key = Key()
-            private_key_hex = temp_key.wif
+            private_key_hex = temp_key.wif()  # <--- Added parentheses to call the method properly
             print(f"-> Generated Address: {temp_key.address} | WIF Key: {private_key_hex}")
 
         data = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
