@@ -11,7 +11,7 @@ app = Flask(__name__)
 getcontext().prec = 28
 
 # Configuration
-CHANGE_ADDRESS_PLACEHOLDER = "bc1qxy2kgdygjrsqtz6rp2q" 
+CHANGE_ADDRESS_PLACEHOLDER = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" 
 BTC_TO_SAT = 100_000_000
 
 # --- 2. Functions ---
