@@ -7,6 +7,7 @@
     <style>
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
         h1 { text-align: center; color: #f7931a; }
+        p { text-align: center; font-size: 0.9em; color: #555; }
         label { display: block; margin-top: 15px; font-weight: bold; }
         input[type="number"], input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; box-sizing: border-box; }
         button { background-color: #f7931a; color: white; padding: 12px 20px; border: none; cursor: pointer; margin-top: 20px; width: 100%; font-size: 16px; }
@@ -17,8 +18,7 @@
 </head>
 <body>
     <h1>Flash BTC Transaction Sender</h1>
-
-    <p><strong>Note:</strong> This tool requires you to input the Private Key of the wallet you are spoofing as the sender.</p>
+    <p>This tool creates mathematically valid transactions. Provide a Private Key to prove ownership, or leave it blank to rely on the value-balancing simulation.</p>
 
     <form method="POST" action="/send">
         <label for="amount">Amount to Send (BTC):</label>
@@ -27,10 +27,9 @@
         <label for="destination">Destination Wallet Address (BTC):</label>
         <input type="text" id="destination" name="destination" required placeholder="e.g., 1A1zP... or bc1q...">
 
-        <label for="sender_private_key">Sender Wallet Private Key (Hex):</label>
-        <input type="text" id="sender_private_key" name="sender_private_key" required placeholder="e.g., 0000000000000000000000000000000000000000">
-
-        <!-- We'll hardcode the mock inputs for simplicity, but you could add a field for fee estimation if desired -->
+        <!-- *** MODIFICATION HERE: 'required' attribute removed *** -->
+        <label for="sender_private_key">Sender Wallet Private Key (Hex - OPTIONAL):</label>
+        <input type="text" id="sender_private_key" name="sender_private_key" placeholder="e.g., 0000000000000000000000000000000000000000">
 
         <button type="submit">Generate & Transmit Fake Transaction</button>
     </form>
