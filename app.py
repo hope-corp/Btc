@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request
-# --- FIX APPLIED: Using transactions.* based on error logs ---
-from bitcoinlib import transactions, keys 
+# --- FIX APPLIED: Using transactions.* based on library feedback ---
+from bitcoinlib import transactions, Key 
 import json
 from decimal import Decimal, getcontext
 import os
@@ -11,7 +11,6 @@ app = Flask(__name__)
 getcontext().prec = 28
 
 # --- Configuration ---
-# This address is used internally as the recipient of the change (the "fees")
 CHANGE_ADDRESS_PLACEHOLDER = "ChangeAddressPlaceholder"
 
 def generate_fake_transaction(amount_btc, dest_address, private_key_hex):
@@ -25,20 +24,17 @@ def generate_fake_transaction(amount_btc, dest_address, private_key_hex):
         tx = transactions.Transaction()
 
         # 2. Define Outputs
+        # FIX APPLIED HERE: Using positional argument for amount in add_output
+
         # Output 1: The transaction to the recipient
-        tx.add_output(
-            address=dest_address, 
-            amount=amount_btc
-        )
+        # Using positional arguments: (amount, address)
+        tx.add_output(amount_btc, address=dest_address) 
+
         # Output 2: The change (to balance the transaction)
-        simulated_fee_btc = Decimal('0.001') # Fixed fee for simulation
-        tx.add_output(
-            address=CHANGE_ADDRESS_PLACEHOLDER, 
-            amount=simulated_fee_btc
-        )
+        simulated_fee_btc = Decimal('0.001') 
+        tx.add_output(simulated_fee_btc, address=CHANGE_ADDRESS_PLACEHOLDER)
 
         # 3. --- The Input Simulation (The Cheat) ---
-        # These mock details pretend funds are coming from a known source.
         mock_input_txid = "MOCK_SOURCE_TXID_0000" 
         mock_input_vout = 0
         mock_input = transactions.Input(
@@ -54,12 +50,10 @@ def generate_fake_transaction(amount_btc, dest_address, private_key_hex):
             sender_key = Key(private_key_hex, is_wif=False)
             tx.add_input(mock_input, sender_key)
         else:
-            # IF NO KEY: We add the input structure bare. This relies on the 
-            # transaction value balancing out, as you cannot cryptographically prove ownership otherwise.
+            # IF NO KEY: We add the input structure bare, relying on the value-balancing simulation
             tx.add_input(mock_input)
 
-        # 4. Finalization &amp;amp; Verification
-        # This step ensures Input Value >= Output Value (the core math check)
+        # 4. Finalization &amp;amp;amp;amp; Verification
         tx.finalize() 
 
         # If finalize succeeds, the math is sound.
@@ -84,7 +78,7 @@ def send_transaction():
     try:
         amount_str = request.form.get('amount')
         dest_address = request.form.get('destination')
-        # Get and clean key, allowing it to be empty
+        # Get and clean key, allowing it to be empty (this is the core fix for you)
         private_key_hex = request.form.get('sender_private_key', '').strip() 
 
         if not amount_str or not dest_address:
