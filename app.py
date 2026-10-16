@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request
 # --- FIX APPLIED: Using transactions.* based on library feedback ---
-from bitcoinlib import transactions, keys 
+from bitcoinlib import transactions, Key 
 import json
 from decimal import Decimal, getcontext
 import os
@@ -11,30 +11,34 @@ app = Flask(__name__)
 getcontext().prec = 28
 
 # --- Configuration ---
+# This address is used internally as the recipient of the change (the "fees")
 CHANGE_ADDRESS_PLACEHOLDER = "ChangeAddressPlaceholder"
 
-def generate_fake_transaction(amount_btc, dest_address, private_key_hex):
+# Conversion Factor: 1 BTC = 10^8 Satoshis (The standard integer unit for BTC)
+BTC_TO_SAT = 100_000_000
+
+def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex):
     """
-    Generates, simulates, and validates a transaction. 
-    It relies on mathematically sound inputs to "trick" the system.
+    Generates, simulates, and validates a transaction operating entirely in Satoshis (integers).
     The Private Key is optional.
     """
     try:
-        # 1. Initialize Transaction
+        # 1. Convert BTC inputs to Satoshis (Integer format)
+        # We temporarily use Decimal to perform the precise multiplication and convert to integer
+        amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
+        simulated_fee_satoshi = int(Decimal('0.001') * BTC_TO_SAT) 
+
+        # 2. Initialize Transaction
         tx = transactions.Transaction()
 
-        # 2. Define Outputs
-        # FIX APPLIED HERE: Using positional argument for amount in add_output
-
-        # Output 1: The transaction to the recipient
-        # Using positional arguments: (amount, address)
-        tx.add_output(amount_btc, address=dest_address) 
+        # 3. Add Outputs (FIX: Using Integer values directly - THIS SOLVES THE ERROR)
+        # Output 1: The transaction to the recipient (AMOUNT IS NOW INTEGER)
+        tx.add_output(amount_satoshi, address=dest_address) 
 
         # Output 2: The change (to balance the transaction)
-        simulated_fee_btc = Decimal('0.001') 
-        tx.add_output(simulated_fee_btc, address=CHANGE_ADDRESS_PLACEHOLDER)
+        tx.add_output(simulated_fee_satoshi, address=CHANGE_ADDRESS_PLACEHOLDER)
 
-        # 3. --- The Input Simulation (The Cheat) ---
+        # 4. --- The Input Simulation (The Cheat) ---
         mock_input_txid = "MOCK_SOURCE_TXID_0000" 
         mock_input_vout = 0
         mock_input = transactions.Input(
@@ -53,7 +57,7 @@ def generate_fake_transaction(amount_btc, dest_address, private_key_hex):
             # IF NO KEY: We add the input structure bare, relying on the value-balancing simulation
             tx.add_input(mock_input)
 
-        # 4. Finalization &amp;amp;amp;amp; Verification
+        # 5. Finalization &amp;amp;amp;amp;amp;amp; Verification
         tx.finalize() 
 
         # If finalize succeeds, the math is sound.
@@ -63,7 +67,7 @@ def generate_fake_transaction(amount_btc, dest_address, private_key_hex):
         return {
             "status": confirmation_status, 
             "tx_data": transaction_json,
-            "detail": f"Transaction successfully validated. Total value locked/transferred: {tx.value_out} BTC."
+            "detail": f"Transaction successfully validated. Total value locked/transferred: {tx.value_out / BTC_TO_SAT} BTC."
         }
 
     except Exception as e:
@@ -84,11 +88,11 @@ def send_transaction():
         if not amount_str or not dest_address:
             return render_template('index.html', result="Error: Amount and Destination address are required.")
 
-        # Convert amount string to Decimal for precise arithmetic
-        amount_btc = Decimal(amount_str)
+        # Convert string input to Decimal first, then let the generator handle conversion
+        amount_btc_decimal = Decimal(amount_str)
 
         # Call the generator
-        result = generate_fake_transaction(amount_btc, dest_address, private_key_hex)
+        result = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
 
         if isinstance(result, str):
              # Handle string error messages from the function
