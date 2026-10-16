@@ -31,17 +31,12 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         mock_input_txid = "0000000000000000000000000000000000000000000000000000000000000000" 
         mock_input_vout = 0
         
-        # Corrected keyword arguments for bitcoinlib.transactions.Input
-        mock_input = transactions.Input(
-            prev_txid=mock_input_txid, 
-            output_n=mock_input_vout
-        )
-
+        # Pass prev_txid and output_n directly into tx.add_input()
         if private_key_hex:
             sender_key = Key(private_key_hex, is_wif=False)
-            tx.add_input(mock_input, sender_key)
+            tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout, keys=sender_key)
         else:
-            tx.add_input(mock_input)
+            tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout)
 
         tx.finalize() 
         confirmation_status = "Confirmed (Systemically Valid)"
