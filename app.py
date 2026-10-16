@@ -34,7 +34,7 @@ def submit_transaction_to_rpc(tx_hex):
         data = response.json()
         
         if "error" in data and data["error"]:
-            return f"Node Checked, Rejected (Expected for Mock UTXO): {data['error'].get('message', 'Unknown error')}"
+            return f"Node Checked & Decoded, Rejected (Expected for Mock UTXO): {data['error'].get('message', 'Unknown error')}"
         
         return f"Success! TXID: {data.get('result')}"
     except Exception as e:
@@ -53,12 +53,13 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         tx.add_output(amount_satoshi, address=dest_address) 
         tx.add_output(simulated_fee_satoshi, address=CHANGE_ADDRESS_PLACEHOLDER)
 
+        # Non-zero 64-character hex string for mock input simulation
         mock_input_txid = "1111111111111111111111111111111111111111111111111111111111111111" 
         mock_input_vout = 0
 
         sender_key = Key(private_key_hex)
         
-        # Explicitly pass the input value so bitcoinlib includes it in serialization
+        # Add simulated input with explicit value mapping
         tx.add_input(
             prev_txid=mock_input_txid, 
             output_n=mock_input_vout, 
