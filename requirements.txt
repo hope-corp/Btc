@@ -2,3 +2,4 @@ flask
 bitcoinlib
 requests
 ecdsa
+base58
