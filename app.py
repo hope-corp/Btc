@@ -69,7 +69,8 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         tx.add_output(amount_satoshi, address=dest_address) 
         tx.add_output(simulated_fee_satoshi, address=CHANGE_ADDRESS_PLACEHOLDER)
 
-        mock_input_txid = "0000000000000000000000000000000000000000000000000000000000000000" 
+        # Use a non-zero mock hash to avoid triggering coinbase detection
+        mock_input_txid = "1111111111111111111111111111111111111111111111111111111111111111" 
         mock_input_vout = 0
 
         # --- Use the Key we generated/provided ---
@@ -80,7 +81,6 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         confirmation_status = "Confirmed (Systemically Valid)"
         transaction_hex = tx.as_hex()
         
-        # Calculate total reliably using input/output parameters
         total_btc_transferred = Decimal(amount_satoshi + simulated_fee_satoshi) / BTC_TO_SAT
 
         return {
