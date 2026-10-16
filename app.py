@@ -28,12 +28,13 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         tx.add_output(amount_satoshi, address=dest_address) 
         tx.add_output(simulated_fee_satoshi, address=CHANGE_ADDRESS_PLACEHOLDER)
 
-        mock_input_txid = "MOCK_SOURCE_TXID_0000" 
+        mock_input_txid = "0000000000000000000000000000000000000000000000000000000000000000" 
         mock_input_vout = 0
+        
+        # Corrected keyword arguments for bitcoinlib.transactions.Input
         mock_input = transactions.Input(
-            txid=mock_input_txid, 
-            vout=mock_input_vout, 
-            script_pubkey="OP_DUP OP_HASH160 0xDEADBEEF123456789... OP_EQUALVERIFY" 
+            prev_txid=mock_input_txid, 
+            output_n=mock_input_vout
         )
 
         if private_key_hex:
