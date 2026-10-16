@@ -39,7 +39,8 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
             tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout)
 
         confirmation_status = "Confirmed (Systemically Valid)"
-        transaction_json = tx.serialize()
+        # Corrected method to obtain the raw transaction hex string
+        transaction_json = tx.as_hex()
         return {
             "status": confirmation_status, 
             "tx_data": transaction_json,
@@ -83,6 +84,5 @@ def send_transaction():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    # Disable debug mode in production to prevent hanging/blocking
     is_debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=is_debug)
