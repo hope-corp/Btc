@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request
 # --- FIX APPLIED HERE: Changed Transaction to transactions based on error message ---
-from bitcoinlib import transactions, Key 
+from bitcoinlib import transactions, keys 
 # -----------------------------------------------------------------------------------
 import json
 from decimal import Decimal, getcontext
