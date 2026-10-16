@@ -23,10 +23,6 @@ RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com"
 def submit_transaction_to_rpc(tx_hex):
     """
     Submits the signed raw transaction hex to the public Bitcoin RPC Node using JSON-RPC format.
-
-    NOTE: Since we are using mock UTXOs, this function will often return a validation error
-    message, but for the purpose of "Faking Success," we prioritize the successful submission
-    if the connection is live, or report the error if it's a network failure.
     """
     try:
         headers = {'Content-Type': 'application/json'}
@@ -61,12 +57,14 @@ def submit_transaction_to_rpc(tx_hex):
 
 def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex):
     """
-    Generates, signs, and prepares a transaction.
+    Generates, signs, and prepares a transaction using explicit local parameters.
     """
     try:
         amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
         simulated_fee_satoshi = int(Decimal('0.001') * BTC_TO_SAT) 
         total_input_satoshi = amount_satoshi + simulated_fee_satoshi
+
+        sender_key = Key(private_key_hex)
 
         tx = transactions.Transaction()
         # Output 1: Recipient
@@ -78,14 +76,14 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         mock_input_txid = "1111111111111111111111111111111111111111111111111111111111111111" 
         mock_input_vout = 0
 
-        sender_key = Key(private_key_hex)
-
-        # Input definition is the heart of the fake—it proves you own the mock input
+        # Providing explicit address and script_type prevents network lookups for mock/fake inputs
         tx.add_input(
             prev_txid=mock_input_txid, 
             output_n=mock_input_vout, 
             keys=sender_key,
-            value=total_input_satoshi # Ensures the input value covers all outputs + fees
+            value=total_input_satoshi,
+            address=sender_key.address(),
+            script_type='p2pkh'
         )
         tx.sign() # The digital signature is applied here
 
@@ -107,7 +105,6 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
 # --- 3. Routes ---
 @app.route('/', methods=['GET'])
 def index():
-    # Assumes you have a template named index.html configured to capture these variables
     return render_template('index.html')
 
 @app.route('/send', methods=['POST'])
@@ -126,7 +123,7 @@ def send_transaction():
         if not private_key_hex:
             temp_key = Key()
             private_key_hex = temp_key.wif() 
-            print(f"--&gt; Auto-Generated Key Used: {private_key_hex}")
+            print(f"--> Auto-Generated Key Used: {private_key_hex}")
 
         # Step 1: Generate the transaction object and signature (Internal Certification)
         data = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
