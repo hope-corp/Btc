@@ -3,7 +3,8 @@ from bitcoinlib import transactions, keys
 import json
 from decimal import Decimal, getcontext
 import os
-import requests
+import requests # <--- NEW IMPORT
+from datetime import datetime # <-- NEW IMPORT
 
 # --- 1. Initialization ---
 app = Flask(__name__)
@@ -12,40 +13,16 @@ app = Flask(__name__)
 getcontext().prec = 28
 
 # Configuration
+# NOTE: Using a real exchange address for better simulation fidelity if possible
 CHANGE_ADDRESS_PLACEHOLDER = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" 
 BTC_TO_SAT = 100_000_000
-PUBLIC_RPC_URL = "https://bitcoin-rpc.publicnode.com"
+RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" # Target RPC Node
 
 # --- 2. Functions ---
-def broadcast_to_node(tx_hex):
+def generate_transaction_data(amount_btc_decimal, dest_address, private_key_hex):
     """
-    Sends the raw transaction hex to the public Bitcoin node via JSON-RPC 
-    using the 'sendrawtransaction' method.
-    """
-    try:
-        headers = {'Content-Type': 'application/json'}
-        payload = {
-            "jsonrpc": "1.0",
-            "id": "flask-bitcoin-tool",
-            "method": "sendrawtransaction",
-            "params": [tx_hex]
-        }
-        response = requests.post(PUBLIC_RPC_URL, json=payload, headers=headers, timeout=10)
-        data = response.json()
-        
-        # Check if the node returned a JSON-RPC error
-        if "error" in data and data["error"]:
-            error_message = data["error"].get("message", "Unknown node error")
-            return {"success": False, "message": error_message}
-        
-        # If successful, returns the transaction ID (TXID)
-        return {"success": True, "txid": data.get("result")}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
-
-def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex):
-    """
-    Generates, simulates, validates, and broadcasts a transaction operating entirely in Satoshis.
+    Generates and signs the raw transaction hex string.
+    Returns a dictionary containing validation status AND the hex string.
     """
     try:
         amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
@@ -57,7 +34,7 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
 
         mock_input_txid = "0000000000000000000000000000000000000000000000000000000000000000" 
         mock_input_vout = 0
-        
+
         if private_key_hex:
             sender_key = Key(private_key_hex, is_wif=False)
             tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout, keys=sender_key)
@@ -65,29 +42,55 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         else:
             tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout)
 
+        confirmation_status = "Prepared (Awaiting RPC Submission)"
         transaction_hex = tx.as_hex()
+
         total_btc_transferred = tx.output_total / BTC_TO_SAT
 
-        # --- Broadcast to PublicNode ---
-        broadcast_res = broadcast_to_node(transaction_hex)
-
-        if broadcast_res["success"]:
-            status_msg = f"SUCCESS! Broadcasted to network. TXID: {broadcast_res['txid']}"
-        else:
-            # Expected behavior for simulated/mock transactions
-            status_msg = f"Generated Successfully, but Node Rejected (Expected for Mock TX): {broadcast_res['message']}"
-
+        # Return structured data for the route to process
         return {
-            "status": status_msg, 
-            "tx_data": transaction_hex,
-            "detail": f"Transaction total value locked/transferred: {total_btc_transferred} BTC."
+            "status": confirmation_status, 
+            "tx_hex": transaction_hex,
+            "total_btc_transferred": total_btc_transferred,
+            "original_amount_sent": amount_btc_decimal
         }
     except Exception as e:
-        return f"Final Validation Error: {str(e)} (Transaction mathematically sound, but library validation failed)."
+        return f"Final Validation Error: {str(e)} (Transaction library failure)."
+
+
+def submit_transaction_to_rpc(tx_hex):
+    """
+    Submits the raw transaction hex to the public node and returns the RPC response.
+    """
+    print(f"\n--- Attempting RPC Submission to {RPC_NODE_URL} ---")
+    try:
+        # The RPC endpoint expects a POST request with the transaction hex
+        rpc_response = requests.post(
+            RPC_NODE_URL, 
+            data=tx_hex, 
+            headers={'Content-Type': 'application/hex'}
+        )
+        rpc_response.raise_for_status() # Raises HTTPError for bad responses (4xx or 5xx)
+
+        # Assuming the response is JSON containing the confirmation status
+        rpc_data = rpc_response.json()
+
+        # Check the RPC response structure for success/status
+        if rpc_data.get('result') and rpc_data['result'] == 'true':
+             return "✅ SUCCESS! Transaction submitted to RPC Node and confirmed by node status."
+        else:
+             return f"⚠️ WARNING: RPC Node accepted the submission, but the result was not 'true'. Details: {rpc_data.get('message', 'No message provided.')}"
+
+    except requests.exceptions.RequestException as e:
+        return f"❌ RPC CONNECTION FAILED: Could not reach or communicate with the node. Error: {e}"
+    except json.JSONDecodeError:
+        return f"❌ RPC PARSING FAILED: Node responded, but the response was not valid JSON. Raw response: {rpc_response.text[:100]}..."
+
 
 # --- 3. Routes ---
 @app.route('/', methods=['GET'])
 def index():
+    # Assuming you have index.html in a 'templates' folder
     return render_template('index.html')
 
 @app.route('/send', methods=['POST'])
@@ -102,15 +105,24 @@ def send_transaction():
 
         amount_btc_decimal = Decimal(amount_str)
 
-        result = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
+        # Step 1: Generate the transaction data
+        data = generate_transaction_data(amount_btc_decimal, dest_address, private_key_hex)
 
-        if isinstance(result, str):
-             return render_template('index.html', result=f"Transaction Error: {result}")
+        # Check for library errors during generation
+        if isinstance(data, str):
+             return render_template('index.html', result=f"Transaction Library Error: {data}")
 
+        tx_hex = data['tx_hex']
+
+        # Step 2: Submit the transaction to the RPC Node
+        rpc_status_message = submit_transaction_to_rpc(tx_hex)
+
+        # --- Final Response Assembly ---
         return render_template(
             'index.html', 
-            result=result['status'], 
-            transaction_data=result['tx_data']
+            result=f"GENERATION SUCCESS: {data['status']} | Submission Status: {rpc_status_message}", 
+            transaction_data=tx_hex, # Report the hex string itself
+            total_btc_transferred=data['total_btc_transferred']
         )
 
     except ValueError:
