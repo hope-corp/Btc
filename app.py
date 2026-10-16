@@ -76,14 +76,14 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         mock_input_txid = "1111111111111111111111111111111111111111111111111111111111111111" 
         mock_input_vout = 0
 
-        # Providing explicit address and script_type prevents network lookups for mock/fake inputs
+        # Removed explicit script_type='p2pkh' to let bitcoinlib automatically infer 
+        # the standard input locking script structure from the provided keys and address.
         tx.add_input(
             prev_txid=mock_input_txid, 
             output_n=mock_input_vout, 
             keys=sender_key,
             value=total_input_satoshi,
-            address=sender_key.address(),
-            script_type='p2pkh'
+            address=sender_key.address()
         )
         tx.sign() # The digital signature is applied here
 
