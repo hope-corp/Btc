@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from bitcoinlib import transactions, Key 
+from bitcoinlib import transactions, keys 
 import json
 from decimal import Decimal, getcontext
 import os
