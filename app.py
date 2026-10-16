@@ -72,11 +72,70 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         mock_input_txid = "0000000000000000000000000000000000000000000000000000000000000000" 
         mock_input_vout = 0
 
-        # --- Use the Key we generated/provided (Removed is_wif argument) ---
+        # --- Use the Key we generated/provided ---
         sender_key = Key(private_key_hex)
         tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout, keys=sender_key)
         tx.sign() 
 
         confirmation_status = "Confirmed (Systemically Valid)"
         transaction_hex = tx.as_hex()
-        total
+        
+        # Calculate total reliably using input/output parameters
+        total_btc_transferred = Decimal(amount_satoshi + simulated_fee_satoshi) / BTC_TO_SAT
+
+        return {
+            "status": confirmation_status, 
+            "tx_hex": transaction_hex,
+            "total_btc_transferred": total_btc_transferred,
+            "original_amount_sent": amount_btc_decimal
+        }
+    except Exception as e:
+        return f"Final Validation Error: {str(e)} (Transaction library failure)."
+
+# --- 3. Routes ---
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html')
+
+@app.route('/send', methods=['POST'])
+def send_transaction():
+    try:
+        amount_str = request.form.get('amount')
+        dest_address = request.form.get('destination')
+        private_key_hex = request.form.get('sender_private_key', '').strip() 
+
+        if not amount_str or not dest_address:
+            return render_template('index.html', result="Error: Amount and Destination address are required.")
+
+        amount_btc_decimal = Decimal(amount_str)
+
+        if not private_key_hex:
+            print("-> No Private Key provided. Generating new ECDSA Keypair internally...")
+            generated_key, generated_address = generate_keypair_and_address()
+            print(f"-> Generated Key: {generated_key} | Public Address: {generated_address}")
+            private_key_hex = generated_key
+
+        data = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
+
+        if isinstance(data, str):
+             return render_template('index.html', result=f"Transaction Library Error: {data}")
+
+        tx_hex = data['tx_hex']
+        rpc_status_message = submit_transaction_to_rpc(tx_hex)
+
+        return render_template(
+            'index.html', 
+            result=f"GENERATION SUCCESS: {data['status']} | Submission Status: {rpc_status_message}", 
+            transaction_data=tx_hex, 
+            total_btc_transferred=data['total_btc_transferred']
+        )
+
+    except ValueError:
+        return render_template('index.html', result="Error: Invalid amount format provided.")
+    except Exception as e:
+        return render_template('index.html', result=f"System Error: {str(e)}")
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    is_debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=is_debug)
