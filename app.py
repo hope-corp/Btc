@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request
-from bitcoinlib import transactions, keys 
+from bitcoinlib import transactions, Key 
 import json
 from decimal import Decimal, getcontext
 import os
+import requests
 
 # --- 1. Initialization ---
 app = Flask(__name__)
@@ -13,12 +14,38 @@ getcontext().prec = 28
 # Configuration
 CHANGE_ADDRESS_PLACEHOLDER = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" 
 BTC_TO_SAT = 100_000_000
+PUBLIC_RPC_URL = "https://bitcoin-rpc.publicnode.com"
 
 # --- 2. Functions ---
+def broadcast_to_node(tx_hex):
+    """
+    Sends the raw transaction hex to the public Bitcoin node via JSON-RPC 
+    using the 'sendrawtransaction' method.
+    """
+    try:
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "jsonrpc": "1.0",
+            "id": "flask-bitcoin-tool",
+            "method": "sendrawtransaction",
+            "params": [tx_hex]
+        }
+        response = requests.post(PUBLIC_RPC_URL, json=payload, headers=headers, timeout=10)
+        data = response.json()
+        
+        # Check if the node returned a JSON-RPC error
+        if "error" in data and data["error"]:
+            error_message = data["error"].get("message", "Unknown node error")
+            return {"success": False, "message": error_message}
+        
+        # If successful, returns the transaction ID (TXID)
+        return {"success": True, "txid": data.get("result")}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex):
     """
-    Generates, simulates, and validates a transaction operating entirely in Satoshis (integers).
-    The Private Key is optional.
+    Generates, simulates, validates, and broadcasts a transaction operating entirely in Satoshis.
     """
     try:
         amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
@@ -38,16 +65,22 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         else:
             tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout)
 
-        confirmation_status = "Confirmed (Systemically Valid)"
         transaction_hex = tx.as_hex()
-        
-        # Using output_total instead of value_out to safely read transaction values
         total_btc_transferred = tx.output_total / BTC_TO_SAT
 
+        # --- Broadcast to PublicNode ---
+        broadcast_res = broadcast_to_node(transaction_hex)
+
+        if broadcast_res["success"]:
+            status_msg = f"SUCCESS! Broadcasted to network. TXID: {broadcast_res['txid']}"
+        else:
+            # Expected behavior for simulated/mock transactions
+            status_msg = f"Generated Successfully, but Node Rejected (Expected for Mock TX): {broadcast_res['message']}"
+
         return {
-            "status": confirmation_status, 
+            "status": status_msg, 
             "tx_data": transaction_hex,
-            "detail": f"Transaction successfully validated. Total value locked/transferred: {total_btc_transferred} BTC."
+            "detail": f"Transaction total value locked/transferred: {total_btc_transferred} BTC."
         }
     except Exception as e:
         return f"Final Validation Error: {str(e)} (Transaction mathematically sound, but library validation failed)."
@@ -76,7 +109,7 @@ def send_transaction():
 
         return render_template(
             'index.html', 
-            result=f"SUCCESS! Transaction generated and confirmed: {result['status']}", 
+            result=result['status'], 
             transaction_data=result['tx_data']
         )
 
