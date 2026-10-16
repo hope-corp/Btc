@@ -46,16 +46,13 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
     """
     wallet_name = "temp_flask_wallet"
     try:
-        # Clean up any existing wallet with the same name to avoid collisions
         wallet_delete_if_exists(wallet_name, delete_db_file=True)
 
-        # Create an isolated watch-only/key wallet
-        wallet = Wallet.create(wallet_name, keys=private_key_hex, network='bitcoin', db_memory=True)
+        # Correct parameter for in-memory database configuration in bitcoinlib
+        wallet = Wallet.create(wallet_name, keys=private_key_hex, network='bitcoin', db_uri="sqlite:///:memory:")
         
         amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
 
-        # Use the wallet's transaction builder for correct binary serialization
-        # (Note: In a mock simulation environment without real funds, sweep or manual output building is used)
         tx = wallet.send_to(dest_address, amount_satoshi, fee=100_000, offline=True, include_immature=True)
 
         confirmation_status = "Confirmed (Systemically Valid & Decodable)"
@@ -71,7 +68,6 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
     except Exception as e:
         return f"Final Validation Error: {str(e)} (Transaction library failure)."
     finally:
-        # Clean up memory/database
         try:
             wallet_delete_if_exists(wallet_name, delete_db_file=True)
         except:
@@ -96,7 +92,7 @@ def send_transaction():
 
         if not private_key_hex:
             print("-> No Private Key provided. Generating new Wallet Key internally...")
-            temp_wallet = Wallet.create("temp_gen_wallet", network='bitcoin', db_memory=True)
+            temp_wallet = Wallet.create("temp_gen_wallet", network='bitcoin', db_uri="sqlite:///:memory:")
             key_obj = temp_wallet.key_new()
             private_key_hex = key_obj.wif
             print(f"-> Generated Address: {key_obj.address} | WIF Key: {private_key_hex}")
