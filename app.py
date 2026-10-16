@@ -47,6 +47,7 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
     try:
         amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
         simulated_fee_satoshi = int(Decimal('0.001') * BTC_TO_SAT) 
+        total_input_satoshi = amount_satoshi + simulated_fee_satoshi
 
         tx = transactions.Transaction()
         tx.add_output(amount_satoshi, address=dest_address) 
@@ -56,13 +57,20 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         mock_input_vout = 0
 
         sender_key = Key(private_key_hex)
-        tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout, keys=sender_key)
+        
+        # Explicitly pass the input value so bitcoinlib includes it in serialization
+        tx.add_input(
+            prev_txid=mock_input_txid, 
+            output_n=mock_input_vout, 
+            keys=sender_key,
+            value=total_input_satoshi
+        )
         tx.sign() 
 
         confirmation_status = "Confirmed (Systemically Valid)"
         transaction_hex = tx.as_hex()
         
-        total_btc_transferred = Decimal(amount_satoshi + simulated_fee_satoshi) / BTC_TO_SAT
+        total_btc_transferred = Decimal(total_input_satoshi) / BTC_TO_SAT
 
         return {
             "status": confirmation_status, 
@@ -93,7 +101,7 @@ def send_transaction():
         if not private_key_hex:
             print("-> No Private Key provided. Generating new Key internally...")
             temp_key = Key()
-            private_key_hex = temp_key.wif()  # <--- Added parentheses to call the method properly
+            private_key_hex = temp_key.wif() 
             print(f"-> Generated Address: {temp_key.address} | WIF Key: {private_key_hex}")
 
         data = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
