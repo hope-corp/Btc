@@ -39,12 +39,15 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
             tx.add_input(prev_txid=mock_input_txid, output_n=mock_input_vout)
 
         confirmation_status = "Confirmed (Systemically Valid)"
-        # Corrected method to obtain the raw transaction hex string
-        transaction_json = tx.as_hex()
+        transaction_hex = tx.as_hex()
+        
+        # Using output_total instead of value_out to safely read transaction values
+        total_btc_transferred = tx.output_total / BTC_TO_SAT
+
         return {
             "status": confirmation_status, 
-            "tx_data": transaction_json,
-            "detail": f"Transaction successfully validated. Total value locked/transferred: {tx.value_out / BTC_TO_SAT} BTC."
+            "tx_data": transaction_hex,
+            "detail": f"Transaction successfully validated. Total value locked/transferred: {total_btc_transferred} BTC."
         }
     except Exception as e:
         return f"Final Validation Error: {str(e)} (Transaction mathematically sound, but library validation failed)."
