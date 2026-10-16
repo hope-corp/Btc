@@ -9,11 +9,8 @@ app = Flask(__name__)
 # Set precision high for financial calculations to handle BTC fractions accurately
 getcontext().prec = 28
 
-# --- Configuration ---
-# Fixed: Switched placeholder to a known, valid Bech32 address
+# Configuration
 CHANGE_ADDRESS_PLACEHOLDER = "bc1qxy2kgdygjrsqtz6rp2q" 
-
-# Conversion Factor: 1 BTC = 10^8 Satoshis (The standard integer unit for Bitcoin)
 BTC_TO_SAT = 100_000_000
 
 def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex):
@@ -22,21 +19,18 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
     The Private Key is optional.
     """
     try:
-        # 1. Convert BTC inputs to Satoshis (Integer format)
         amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
         simulated_fee_satoshi = int(Decimal('0.001') * BTC_TO_SAT) 
 
-        # 2. Initialize Transaction
+        # Initialize Transaction
         tx = transactions.Transaction()
 
-        # 3. Add Outputs (Using positional arguments)
         # Output 1: The transaction to the recipient
         tx.add_output(amount_satoshi, address=dest_address) 
-
-        # Output 2: The change (Now using the Bech32 placeholder)
+        # Output 2: The change (Bech32)
         tx.add_output(simulated_fee_satoshi, address=CHANGE_ADDRESS_PLACEHOLDER)
 
-        # 4. --- The Input Simulation (The Cheat) ---
+        # --- The Input Simulation (The Cheat) ---
         mock_input_txid = "MOCK_SOURCE_TXID_0000" 
         mock_input_vout = 0
         mock_input = transactions.Input(
@@ -52,7 +46,7 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         else:
             tx.add_input(mock_input)
 
-        # 5. Finalization &amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp; Verification
+        # Finalization &amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp; Verification
         try:
             tx.finalize() 
             confirmation_status = "Confirmed (Systemically Valid)"
