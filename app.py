@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from bitcoinlib import transactions, keys 
+from bitcoinlib import transactions, Key 
 import json
 from decimal import Decimal, getcontext
 import os
@@ -46,7 +46,7 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
         else:
             tx.add_input(mock_input)
 
-        # Finalization &amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp; Verification
+        # Finalization &amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp;amp; Verification
         try:
             tx.finalize() 
             confirmation_status = "Confirmed (Systemically Valid)"
