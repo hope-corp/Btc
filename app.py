@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request
-# --- FIX APPLIED: Using transactions.* based on library feedback ---
 from bitcoinlib import transactions, keys 
 import json
 from decimal import Decimal, getcontext
@@ -11,10 +10,10 @@ app = Flask(__name__)
 getcontext().prec = 28
 
 # --- Configuration ---
-# This address is used internally as the recipient of the change (the "fees")
-CHANGE_ADDRESS_PLACEHOLDER = "ChangeAddressPlaceholder"
+# FIX APPLIED: Replaced placeholder string with a known, valid Bitcoin address (Legacy Address)
+CHANGE_ADDRESS_PLACEHOLDER = "1A1zP2X4ADA8bRfgqZzH9G2sWk" 
 
-# Conversion Factor: 1 BTC = 10^8 Satoshis (The standard integer unit for BTC)
+# Conversion Factor: 1 BTC = 10^8 Satoshis (The standard integer unit for Bitcoin)
 BTC_TO_SAT = 100_000_000
 
 def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex):
@@ -24,14 +23,14 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
     """
     try:
         # 1. Convert BTC inputs to Satoshis (Integer format)
-        # We temporarily use Decimal to perform the precise multiplication and convert to integer
+        # We use Decimal temporarily to perform the precise multiplication and convert to integer
         amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
         simulated_fee_satoshi = int(Decimal('0.001') * BTC_TO_SAT) 
 
         # 2. Initialize Transaction
         tx = transactions.Transaction()
 
-        # 3. Add Outputs (FIX: Using Integer values directly - THIS SOLVES THE ERROR)
+        # 3. Add Outputs (FIX: Using positional argument for amount in add_output)
         # Output 1: The transaction to the recipient (AMOUNT IS NOW INTEGER)
         tx.add_output(amount_satoshi, address=dest_address) 
 
@@ -57,7 +56,7 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
             # IF NO KEY: We add the input structure bare, relying on the value-balancing simulation
             tx.add_input(mock_input)
 
-        # 5. Finalization &amp;amp;amp;amp;amp;amp; Verification
+        # 5. Finalization &amp;amp;amp;amp;amp;amp;amp;amp; Verification
         tx.finalize() 
 
         # If finalize succeeds, the math is sound.
