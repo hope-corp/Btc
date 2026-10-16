@@ -48,4 +48,41 @@ def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
     except Exception as e:
         return f"Final Validation Error: {str(e)} (Transaction mathematically sound, but library validation failed)."
 
-# ---
+# --- 3. Routes ---
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html')
+
+@app.route('/send', methods=['POST'])
+def send_transaction():
+    try:
+        amount_str = request.form.get('amount')
+        dest_address = request.form.get('destination')
+        private_key_hex = request.form.get('sender_private_key', '').strip() 
+
+        if not amount_str or not dest_address:
+            return render_template('index.html', result="Error: Amount and Destination address are required.")
+
+        amount_btc_decimal = Decimal(amount_str)
+
+        result = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
+
+        if isinstance(result, str):
+             return render_template('index.html', result=f"Transaction Error: {result}")
+
+        return render_template(
+            'index.html', 
+            result=f"SUCCESS! Transaction generated and confirmed: {result['status']}", 
+            transaction_data=result['tx_data']
+        )
+
+    except ValueError:
+        return render_template('index.html', result="Error: Invalid amount format provided.")
+    except Exception as e:
+        return render_template('index.html', result=f"System Error: {str(e)}")
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    # Disable debug mode in production to prevent hanging/blocking
+    is_debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=is_debug)
