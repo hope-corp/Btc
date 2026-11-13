@@ -1,5 +1,3 @@
-flask
-bitcoinlib
 requests
-ecdsa
-base58
+beautifulsoup4
+jinja2
