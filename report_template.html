@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIG Vulnerability Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; color: #333; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        .summary { background-color: #ecf0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .finding-list { list-style: none; padding: 0; }
+        .finding-item { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-left-width: 8px; border-radius: 4px; }
+        .finding-item h3 { margin-top: 0; }
+        .severity-High { background-color: #fbeaea; border-left-color: #e74c3c; }
+        .severity-Medium { background-color: #fffbe6; border-left-color: #f39c12; }
+        .severity-Low { background-color: #e9f7ef; border-left-color: #2ecc71; }
+        .detail-box { margin-top: 10px; padding: 10px; background: #fafafa; border-radius: 4px; font-size: 0.9em; }
+        .meta-info { font-size: 0.85em; color: #7f8c8d; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DIG Vulnerability Scan Report</h1>
+
+        <div class="summary">
+            <h2>Scan Target: <code>{{ target_url }}</code></h2>
+            <p><strong>Total Vulnerabilities Found:</strong> {{ total_findings }}</p>
+            <p>Scan Date: {{ now() | datetimeformat }}</p>
+        </div>
+
+        {% if findings %}
+            <h2>Detailed Findings</h2>
+            <ul class="finding-list">
+                {% for finding in findings %}
+                <li class="finding-item severity-{{ finding.severity }}">
+                    <h3>[{{ finding.severity }}] {{ finding.type }}</h3>
+                    <p><strong>Description:</strong> {{ finding.description }}</p>
+
+                    {% if finding.details %}
+                    <div class="detail-box">
+                        <strong>Technical Details:</strong>
+                        <ul>
+                            {% for key, value in finding.details.items() %}
+                                <li><strong>{{ key|capitalize }}:</strong> {{ value }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color: #27ae60; font-size: 1.2em;">🎉 SUCCESS! No significant vulnerabilities detected by the automated checks.</p>
+        {% endif %}
+
+        <div class="meta-info">
+            Scan Framework: DIG-ONE by DIG AI. This report is auto-generated.
+        </div>
+    </div>
+</body>
+</html>
