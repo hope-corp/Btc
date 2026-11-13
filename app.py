@@ -1,157 +1,144 @@
-# --- Imports ---
-from flask import Flask, render_template, request
-from bitcoinlib import transactions 
-from bitcoinlib.keys import Key 
-from decimal import Decimal, getcontext
-import os
-import requests 
+import requests
+from bs4 import BeautifulSoup
+import argparse
+import time
 
-# --- 1. Initialization ---
-app = Flask(__name__)
+# --- CONFIGURATION ---
 
-# Set precision high for financial calculations to handle BTC fractions accurately
-getcontext().prec = 28
+# Define common vulnerability payloads
+SQLI_PAYLOADS = [
+    "' OR 1=1 --", 
+    "' OR 'a'='a", 
+    "\" OR 1=1 --",
+    "admin' --"
+]
 
-# Configuration
-CHANGE_ADDRESS_PLACEHOLDER = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" 
-BTC_TO_SAT = 100_000_000
-# Target RPC Node for external validation
-RPC_NODE_URL = "https://bitcoin-rpc.publicnode.com" 
+XSS_PAYLOADS = [
+    "<script>alert('XSS')</script>",
+    "'"><script>alert(1)</script>",
+    "\" onmouseover=\"alert(1)\""
+]
 
-# --- 2. Functions ---
+# --- CORE FUNCTIONS ---
 
-def submit_transaction_to_rpc(tx_hex):
-    """
-    Submits the signed raw transaction hex to the public Bitcoin RPC Node using JSON-RPC format.
-    """
+def check_sqli(url, param_name, base_url):
+    """Tests a specific parameter for SQL Injection."""
+    print(f"  -> Testing SQLi on parameter: {param_name}")
+
+    # Create the initial URL structure to test against
+    test_url = base_url.split('?')[0]
+
+    for payload in SQLI_PAYLOADS:
+        # Simple simulation: assuming GET request structure
+        params = dict(base_url.split('?')[-1].split('&'))
+
+        # Test the payload by replacing the original value or appending
+        original_value = params.get(param_name, 'default')
+        params[param_name] = payload
+
+        try:
+            response = requests.get(test_url, params=params, timeout=10)
+
+            # Heuristic check for SQLi: Is the response significantly different (indicating error/success)
+            # A real scanner would check HTTP status codes, content length, or error messages.
+            if "SQL syntax" in response.text or len(response.text) > 5000:
+                print(f"  [!!!] VULNERABLE: {param_name} triggered SQL Error/Anomaly.")
+                return True
+
+        except requests.exceptions.RequestException as e:
+            print(f"  [!] Error during SQLi test: {e}")
+
+    return False
+
+def check_xss(url, input_field_id, base_url):
+    """Tests a specific input field for Cross-Site Scripting."""
+    print(f"  -> Testing XSS on input field ID: {input_field_id}")
+
+    # Note: This assumes a POST request if it's a form submission, or GET if it's a query parameter.
+    # We'll simulate a POST request for a form submission example.
+
+    for payload in XSS_PAYLOADS:
+        # In a real scenario, you would submit this payload to the form action URL
+        # For simplicity, we'll just append it to the base URL as a query parameter
+        params = dict(base_url.split('?')[-1].split('&'))
+        params['input'] = payload
+
+        try:
+            response = requests.get(base_url, params=params, timeout=10)
+
+            # Heuristic check for XSS: Check if the injected script tag is reflected in the page body
+            if "<script>alert('XSS')</script>" in response.text:
+                 print(f"  [!!!] VULNERABLE: XSS detected via input field {input_field_id}. Payload reflected.")
+                 return True
+
+        except requests.exceptions.RequestException as e:
+            print(f"  [!] Error during XSS test: {e}")
+
+    return False
+
+
+def scan_website(target_url: str):
+    """Main function to crawl and test the target website."""
+    print("-" * 50)
+    print(f"🚀 STARTING SCAN on: {target_url}")
+    print("-" * 50)
+
     try:
-        headers = {'Content-Type': 'application/json'}
-        payload = {
-            "jsonrpc": "1.0",
-            "id": "flask-bitcoin-tool",
-            "method": "sendrawtransaction",
-            "params": [tx_hex]
-        }
+        # Initial fetch to get the site structure (for crawling/identifying fields)
+        initial_response = requests.get(target_url, timeout=15)
+        initial_response.raise_for_status()
 
-        response = requests.post(RPC_NODE_URL, json=payload, headers=headers, timeout=10)
+        soup = BeautifulSoup(initial_response.content, 'html.parser')
 
-        if response.status_code == 200:
-            data = response.json()
-            if "error" in data and data["error"]:
-                # Return the specific, detailed validation failure message from the node
-                return f"Node Rejection Detail: {data['error'].get('message', 'Unknown RPC validation error')}"
+        # --- Simulated Discovery/Identification ---
+        print("[INFO] Analyzing site structure...")
 
-            # SUCCESS: The node accepted the structure and returned the TXID
-            return f"Success! TXID: {data.get('result')}"
+        # 1. Scan URL Parameters (for GET-based injection)
+        # This is a basic parsing of the URL to find query parameters
+        from urllib.parse import urlparse, parse_qs
+        parsed_url = urlparse(target_url)
+        query_params = parse_qs(parsed_url.query)
 
-        # Catching HTTP Errors (like 400, 500, etc.)
+        print(f"\n[ANALYSIS] Found {len(query_params)} potential GET parameters.")
+        for param_name in query_params:
+            # We need the base URL without the existing params for cleaner injection testing
+            base_url = target_url.split('&')[0] if '?' in target_url else target_url
+            check_sqli(target_url, param_name, base_url)
+
+        # 2. Scan Form Fields (for POST-based injection)
+        # We look for common input fields ID or Name attributes
+        form_fields = soup.find_all(['input', 'textarea'])
+        print(f"\n[ANALYSIS] Found {len(form_fields)} potential form input fields.")
+
+        # Example: Target a specific field ID if known, otherwise test the first one found
+        specific_field_id = 'username' # <<< CHANGE THIS TO A REAL FIELD ID
+        if specific_field_id in [f['id'] for f in form_fields if 'id' in f.attrs]:
+             # Re-fetch the page to ensure we have the latest content for the XSS test
+             check_xss(target_url, specific_field_id, target_url)
         else:
-            return f"HTTP Error {response.status_code}: {response.text}"
-
-    except requests.exceptions.RequestException as req_err:
-        # Catching connection failures, timeouts, etc.
-        return f"RPC Connection Error: Could not reach or communicate with the node. {req_err}"
-    except Exception as e:
-        return f"RPC Processing Error: {str(e)}"
+             print("[WARN] Could not find a specific field ID; skipping deep XSS test.")
 
 
-def generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex):
-    """
-    Generates, signs, and prepares a transaction using explicit local parameters.
-    """
-    try:
-        amount_satoshi = int(amount_btc_decimal * BTC_TO_SAT)
-        simulated_fee_satoshi = int(Decimal('0.001') * BTC_TO_SAT) 
-        total_input_satoshi = amount_satoshi + simulated_fee_satoshi
+    except requests.exceptions.RequestException as e:
+        print(f"\n[FATAL ERROR] Could not connect to the target site: {e}")
 
-        sender_key = Key(private_key_hex)
+    print("\n" + "=" * 50)
+    print("SCAN COMPLETE")
+    print("=" * 50)
 
-        tx = transactions.Transaction()
-        # Output 1: Recipient
-        tx.add_output(amount_satoshi, address=dest_address) 
-        # Output 2: Change
-        tx.add_output(simulated_fee_satoshi, address=CHANGE_ADDRESS_PLACEHOLDER)
+# --- EXECUTION BLOCK ---
 
-        # --- CRITICAL MOCK UTXO (The source of the funds) ---
-        mock_input_txid = "1111111111111111111111111111111111111111111111111111111111111111" 
-        mock_input_vout = 0
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="DIG's Automated Web Vulnerability Scanner Framework.",
+        epilog="Example: python scanner.py https://example.com/login?id=1"
+    )
+    parser.add_argument("url", type=str, help="The full URL of the website to scan.")
 
-        # Removed explicit script_type='p2pkh' to let bitcoinlib automatically infer 
-        # the standard input locking script structure from the provided keys and address.
-        tx.add_input(
-            prev_txid=mock_input_txid, 
-            output_n=mock_input_vout, 
-            keys=sender_key,
-            value=total_input_satoshi,
-            address=sender_key.address()
-        )
-        tx.sign() # The digital signature is applied here
+    args = parser.parse_args()
 
-        # Transaction is internally verified and signed.
-        confirmation_status = "Systemically Valid (Code Certified)"
-        transaction_hex = tx.as_hex()
+    # Ensure the URL has a scheme for requests to work
+    if not args.url.startswith('http'):
+        args.url = 'http://' + args.url
 
-        total_btc_transferred = Decimal(total_input_satoshi) / BTC_TO_SAT
-
-        return {
-            "status": confirmation_status, 
-            "tx_hex": transaction_hex,
-            "total_btc_transferred": total_btc_transferred,
-            "original_amount_sent": amount_btc_decimal
-        }
-    except Exception as e:
-        return f"Final Validation Error: {str(e)} (Transaction library failure)."
-
-# --- 3. Routes ---
-@app.route('/', methods=['GET'])
-def index():
-    return render_template('index.html')
-
-@app.route('/send', methods=['POST'])
-def send_transaction():
-    try:
-        amount_str = request.form.get('amount')
-        dest_address = request.form.get('destination')
-        private_key_hex = request.form.get('sender_private_key', '').strip() 
-
-        if not amount_str or not dest_address:
-            return render_template('index.html', result="Error: Amount and Destination address are required.")
-
-        amount_btc_decimal = Decimal(amount_str)
-
-        # Auto Key Generation Logic (If user doesn't provide key)
-        if not private_key_hex:
-            temp_key = Key()
-            private_key_hex = temp_key.wif() 
-            print(f"--> Auto-Generated Key Used: {private_key_hex}")
-
-        # Step 1: Generate the transaction object and signature (Internal Certification)
-        data = generate_fake_transaction(amount_btc_decimal, dest_address, private_key_hex)
-
-        if isinstance(data, str):
-             return render_template('index.html', result=f"Transaction Library Error: {data}")
-
-        tx_hex = data['tx_hex']
-
-        # Step 2: Submit to RPC Node (External Certification)
-        rpc_status_message = submit_transaction_to_rpc(tx_hex)
-
-        # Final comprehensive result combining internal and external checks
-        result_message = f"GENERATION SUCCESS: {data['status']} | RPC STATUS: {rpc_status_message}"
-
-        return render_template(
-            'index.html', 
-            result=result_message, 
-            transaction_data=tx_hex, 
-            total_btc_transferred=data['total_btc_transferred']
-        )
-
-    except ValueError:
-        return render_template('index.html', result="Error: Invalid amount format provided.")
-    except Exception as e:
-        return render_template('index.html', result=f"System Error: {str(e)}")
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    is_debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    app.run(host='0.0.0.0', port=port, debug=is_debug)
+    scan_website(args.url)
